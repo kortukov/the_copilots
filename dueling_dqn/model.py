@@ -1,45 +1,29 @@
 """Neural network for the Dueling DQN algorithm."""
-
-import math
-
-import torch.nn.functional as F
 from torch import nn
 
 
 class DuelingDQN(nn.Module):
-    """Convolutional neural network for the Atari games."""
-
-    def __init__(self, num_actions):
+    def __init__(self, input_dim, output_dim):
         super(DuelingDQN, self).__init__()
-        self.conv1 = nn.Conv2d(4, 32, kernel_size=8, stride=4)
-        std = math.sqrt(2.0 / (4 * 84 * 84))
-        nn.init.normal_(self.conv1.weight, mean=0.0, std=std)
-        self.conv1.bias.data.fill_(0.0)
+        self.input_dim = input_dim
+        self.output_dim = output_dim
 
-        self.conv2 = nn.Conv2d(32, 64, kernel_size=4, stride=2)
-        std = math.sqrt(2.0 / (32 * 4 * 8 * 8))
-        nn.init.normal_(self.conv2.weight, mean=0.0, std=std)
-        self.conv2.bias.data.fill_(0.0)
+        self.feauture_layer = nn.Sequential(
+            nn.Linear(self.input_dim[0], 128), nn.ReLU(), nn.Linear(128, 128), nn.ReLU()
+        )
 
-        self.conv3 = nn.Conv2d(64, 64, kernel_size=3, stride=1)
-        std = math.sqrt(2.0 / (64 * 32 * 4 * 4))
-        nn.init.normal_(self.conv3.weight, mean=0.0, std=std)
-        self.conv3.bias.data.fill_(0.0)
+        self.value_stream = nn.Sequential(
+            nn.Linear(128, 128), nn.ReLU(), nn.Linear(128, 1)
+        )
 
-        self.fc1 = nn.Linear(64 * 7 * 7, 512)
-        std = math.sqrt(2.0 / (64 * 64 * 3 * 3))
-        nn.init.normal_(self.fc1.weight, mean=0.0, std=std)
-        self.fc1.bias.data.fill_(0.0)
-        self.V = nn.Linear(512, 1)
-        self.A = nn.Linear(512, num_actions)
+        self.advantage_stream = nn.Sequential(
+            nn.Linear(128, 128), nn.ReLU(), nn.Linear(128, self.output_dim)
+        )
 
-    def forward(self, states):
-        """Forward pass of the neural network with some inputs."""
-        x = F.relu(self.conv1(states))
-        x = F.relu(self.conv2(x))
-        x = F.relu(self.conv3(x))
-        x = F.relu(self.fc1(x.view(x.size(0), -1)))  # Flatten imathut.
-        V = self.V(x)
-        A = self.A(x)
-        Q = V + (A - A.mean(dim=1, keepdim=True))
-        return Q
+    def forward(self, state):
+        features = self.feauture_layer(state)
+        values = self.value_stream(features)
+        advantages = self.advantage_stream(features)
+        qvals = values + (advantages - advantages.mean())
+
+        return qvals

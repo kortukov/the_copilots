@@ -1,6 +1,9 @@
+import gymnasium as gym
+from gymnasium import spaces
+
 import random
-import gym
-from gym import spaces
+from collections import deque
+import numpy as np
 
 
 class Args:
@@ -17,7 +20,6 @@ class Args:
         self.replay_memory_size = 10000
         self.clip = 1.0
         self.alpha = 0.95
-        self.epsilon = 0.01
         self.learning_rate = 0.0005
 
 
@@ -46,38 +48,21 @@ class DiscreteActionWrapper(gym.ActionWrapper):
         )
 
 
-class Transition:
-    """Transition object that represents a transition in the environment."""
-
-    def __init__(self, state, action, reward, next_state, done):
-        """Initialize a Transition object."""
-        self.state = state
-        self.action = action
-        self.reward = reward
-        self.next_state = next_state
-        self.done = done
-
-
-class ReplayMemory:
-    """Replay memory that stores the transitions."""
-
+class ReplayBuffer:
     def __init__(self, capacity):
-        """Initialize a ReplayMemory object."""
-        self.capacity = capacity
-        self.memory = []
-        self.position = 0
+        self.buffer = deque(maxlen=capacity)
 
-    def push(self, *args):
-        """Saves a transition."""
-        if len(self.memory) < self.capacity:
-            self.memory.append(None)
-        self.memory[self.position] = Transition(*args)
-        self.position = (self.position + 1) % self.capacity
+    def push(self, state, action, reward, next_state, done):
+        state = np.expand_dims(state, 0)
+        next_state = np.expand_dims(next_state, 0)
+
+        self.buffer.append((state, action, reward, next_state, done))
 
     def sample(self, batch_size):
-        """Returns a batch of samples."""
-        return random.sample(self.memory, batch_size)
+        state, action, reward, next_state, done = zip(
+            *random.sample(self.buffer, batch_size)
+        )
+        return np.concatenate(state), action, reward, np.concatenate(next_state), done
 
     def __len__(self):
-        """Returns the length of the memory."""
-        return len(self.memory)
+        return len(self.buffer)
