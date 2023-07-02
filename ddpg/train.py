@@ -3,6 +3,7 @@ import numpy as np
 import optparse
 import pickle
 import time
+from tqdm import tqdm
 import torch
 
 from DDPG import DDPGAgent
@@ -30,6 +31,12 @@ def main():
     optParser.add_option('-s', '--seed',action='store',  type='int',
                          dest='seed',default=None,
                          help='random seed (default %default)')
+    optParser.add_option('--model', action='store', type='string',
+                        dest='model', default=None,
+                        help='Path to load a model checkpoint from')
+    optParser.add_option('--results-dir', action='store', type='string',
+                        dest='results_dir', default='results',
+                        help='Directory to store results in')
     opts, args = optParser.parse_args()
     ############## Hyperparameters ##############
     env_name = opts.env_name
@@ -48,6 +55,9 @@ def main():
     lr  = opts.lr                # learning rate of DDPG policy
     random_seed = opts.seed
     #############################################
+    # Parameters for loading and saving models and results
+    model_path = opts.model
+    results_dir = opts.results_dir
 
 
     if random_seed is not None:
@@ -56,6 +66,11 @@ def main():
 
     ddpg = DDPGAgent(env.observation_space, env.action_space, eps = eps, learning_rate_actor = lr,
                      update_target_every = opts.update_every)
+    if model_path:
+        print(f"Loading model from {model_path}")
+        ddpg_state = torch.load(model_path)
+        ddpg.restore_state(ddpg_state)
+
 
     # logging variables
     rewards = []
@@ -64,12 +79,12 @@ def main():
     timestep = 0
 
     def save_statistics():
-        with open(f"./results/DDPG_{env_name}-eps{eps}-t{train_iter}-l{lr}-s{random_seed}-stat.pkl", 'wb') as f:
+        with open(f"{results_dir}/DDPG_{env_name}-eps{eps}-t{train_iter}-l{lr}-s{random_seed}-stat.pkl", 'wb') as f:
             pickle.dump({"rewards" : rewards, "lengths": lengths, "eps": eps, "train": train_iter,
                          "lr": lr, "update_every": opts.update_every, "losses": losses}, f)
 
     # training loop
-    for i_episode in range(1, max_episodes+1):
+    for i_episode in tqdm(range(1, max_episodes+1)):
         start_ts = time.time()
         times = {}
         ob, _info = env.reset()
@@ -94,7 +109,7 @@ def main():
         # save every 500 episodes
         if i_episode % 500 == 0:
             print("########## Saving a checkpoint... ##########")
-            torch.save(ddpg.state(), f'./results/DDPG_{env_name}_{i_episode}-eps{eps}-t{train_iter}-l{lr}-s{random_seed}.pth')
+            torch.save(ddpg.state(), f'{results_dir}/DDPG_{env_name}_{i_episode}-eps{eps}-t{train_iter}-l{lr}-s{random_seed}.pth')
             save_statistics()
 
         # logging
