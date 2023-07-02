@@ -5,22 +5,24 @@ import random
 from collections import deque
 import numpy as np
 
+import dataclasses
+import torch
 
+@dataclasses.dataclass
 class Args:
     """Hyperparameters for the DQN agent."""
 
-    def __init__(self):
-        self.num_episodes = 1000
-        self.batch_size = 64
-        self.gamma = 0.99
-        self.initial_epsilon = 1.0
-        self.final_epsilon = 0.05
-        self.decay_rate = 0.0001
-        self.target_update = 10
-        self.replay_memory_size = 10000
-        self.clip = 1.0
-        self.alpha = 0.95
-        self.learning_rate = 0.0005
+    num_episodes = 1000
+    batch_size = 64
+    gamma = 0.99
+    initial_epsilon = 1.0
+    final_epsilon = 0.05
+    decay_rate = 0.0001
+    target_update = 10
+    replay_memory_size = 10000
+    clip = 1.0
+    learning_rate = 0.001
+    bins = 5
 
 
 class DiscreteActionWrapper(gym.ActionWrapper):
@@ -66,3 +68,12 @@ class ReplayBuffer:
 
     def __len__(self):
         return len(self.buffer)
+
+def set_seed(seed):
+    """Set seed for reproducibility."""
+    torch.manual_seed(seed)
+    torch.cuda.manual_seed(seed)
+    np.random.seed(seed)
+
+    torch.backends.cudnn.deterministic = True
+    torch.backends.cudnn.benchmark = False
