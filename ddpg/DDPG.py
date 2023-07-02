@@ -10,7 +10,8 @@ from gymnasium import spaces
 import memory as mem
 from feedforward import Feedforward
 
-device = torch.device("mps") if torch.backends.mps.is_available() else torch.device("cpu")
+# device = torch.device("mps") if torch.backends.mps.is_available() else torch.device("cpu")
+device = torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
 print(device)
 torch.set_num_threads(1)
 
@@ -136,6 +137,8 @@ class DDPGAgent(object):
                                   action_dim=self._action_n,
                                   hidden_sizes= self._config["hidden_sizes_critic"],
                                   learning_rate = 0)
+        for param in self.Q_target.parameters():
+            param.requires_grad = False
 
         high, low = torch.from_numpy(self._action_space.high), torch.from_numpy(self._action_space.low)
         # TODO:
@@ -164,6 +167,8 @@ class DDPGAgent(object):
                                          output_size=self._action_n,
                                          activation_fun = torch.nn.ReLU(),
                                          output_activation = output_activation)
+        for param in self.policy_target.parameters():
+            param.requires_grad = False
 
         self._copy_nets()
 
