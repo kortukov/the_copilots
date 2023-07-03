@@ -1,4 +1,5 @@
 import numpy as np
+import random
 
 # class to store transitions
 class Memory():
@@ -20,7 +21,9 @@ class Memory():
     def sample(self, batch=1):
         if batch > self.size:
             batch = self.size
-        self.inds=np.random.choice(range(self.size), size=batch, replace=False)
+        # self.inds=np.random.choice(range(self.size), size=batch, replace=False)
+        # This is much faster than np.random.choice
+        self.inds=random.sample(range(self.size), k=batch)
         return self.transitions[self.inds,:]
 
     def get_all_transitions(self):
