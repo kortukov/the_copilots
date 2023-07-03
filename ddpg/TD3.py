@@ -1,4 +1,5 @@
 from contextlib import contextmanager
+import itertools
 import torch
 import time
 import torch.nn as nn
@@ -91,9 +92,9 @@ def catchtime(time_dict, name) -> float:
         time_dict[name] = time.time() - start_ts
     
 
-class DDPGAgent(object):
+class TD3Agent(object):
     """
-    Agent implementing DDPG.
+    Agent implementing TD3.
     """
     def __init__(self, observation_space, action_space, **userconfig):
 
@@ -112,14 +113,17 @@ class DDPGAgent(object):
             "eps": 0.1,            # Epsilon: noise strength to add to policy
             "discount": 0.95,
             "buffer_size": int(1e6),
-            "batch_size": 128,
+            "batch_size": 512,
             "learning_rate_actor": 0.00001,
             "learning_rate_critic": 0.0001,
             "hidden_sizes_actor": [128,128],
             "hidden_sizes_critic": [128,128,64],
             "update_target_every": 100,
             "use_target_net": True,
-            "polyak": None,
+            "polyak": 0.995,
+            "target_noise": 0.2,
+            "target_noise_clip": 0.5,
+            "policy_delay": 2,
         }
         self._config.update(userconfig)
         self._eps = self._config['eps']
@@ -134,15 +138,23 @@ class DDPGAgent(object):
                            action_dim=self._action_n,
                            hidden_sizes= self._config["hidden_sizes_critic"],
                            learning_rate = self._config["learning_rate_critic"]).to(device)
-        # For compatibility with TD3
-        self.Q2 = self.Q1
+        self.Q2 = QFunction(observation_dim=self._obs_dim,
+                           action_dim=self._action_n,
+                           hidden_sizes= self._config["hidden_sizes_critic"],
+                           learning_rate = self._config["learning_rate_critic"]).to(device)
         # target Q Network
         self.Q1_target = QFunction(observation_dim=self._obs_dim,
                                   action_dim=self._action_n,
                                   hidden_sizes= self._config["hidden_sizes_critic"],
                                   learning_rate = 0).to(device)
-        self.Q2_target = self.Q1_target
-        for param in self.Q1_target.parameters():
+        # target Q Network
+        self.Q2_target = QFunction(observation_dim=self._obs_dim,
+                                  action_dim=self._action_n,
+                                  hidden_sizes= self._config["hidden_sizes_critic"],
+                                  learning_rate = 0).to(device)
+
+        # Target networks are not trained
+        for param in itertools.chain(self.Q1_target.parameters(), self.Q2_target.parameters()):
             param.requires_grad = False
 
         high, low = torch.from_numpy(self._action_space.high).to(device), torch.from_numpy(self._action_space.low).to(device)
@@ -181,16 +193,21 @@ class DDPGAgent(object):
                                         lr=self._config["learning_rate_actor"],
                                         eps=0.000001)
         self.train_iter = 0
+        self.prev_actor_loss_value = 0
 
     def _copy_nets(self):
         self.Q1_target.load_state_dict(self.Q1.state_dict())
+        self.Q2_target.load_state_dict(self.Q2.state_dict())
         self.policy_target.load_state_dict(self.policy.state_dict())
     
-    def _polyak_average_nets(self):
+    def _polyak_average_target_networks(self):
         polyak = self._config["polyak"]
         # Update Q network target 
         with torch.no_grad():
             for param, target_param in zip(self.Q1.parameters(), self.Q1_target.parameters()):
+                target_param.data.mul_(polyak)
+                target_param.data.add_((1 - polyak) * param.data)
+            for param, target_param in zip(self.Q2.parameters(), self.Q2_target.parameters()):
                 target_param.data.mul_(polyak)
                 target_param.data.add_((1 - polyak) * param.data)
 
@@ -198,6 +215,7 @@ class DDPGAgent(object):
             for param, target_param in zip(self.policy.parameters(), self.policy_target.parameters()):
                 target_param.data.mul_(polyak)
                 target_param.data.add_((1 - polyak) * param.data)   
+
 
     def act(self, observation, eps=None):
         # TODO: implement this: use self.action_noise() (which provides normal noise with standard variance)
@@ -212,11 +230,12 @@ class DDPGAgent(object):
         self.buffer.add_transition(transition)
 
     def state(self):
-        return (self.Q1.state_dict(), self.policy.state_dict())
+        return (self.Q1.state_dict(), self.Q2.state_dict(), self.policy.state_dict())
 
     def restore_state(self, state):
         self.Q1.load_state_dict(state[0])
-        self.policy.load_state_dict(state[1])
+        self.Q2.load_state_dict(state[1])
+        self.policy.load_state_dict(state[2])
         self._copy_nets()
 
     def reset(self):
@@ -227,33 +246,43 @@ class DDPGAgent(object):
         losses = []
         self.train_iter+=1
         if self._config["polyak"] is not None:
-            self._polyak_average_nets()
+            self._polyak_average_target_networks()
         elif self._config["use_target_net"] and self.train_iter % self._config["update_target_every"] == 0:
             self._copy_nets()
 
+        actor_loss_value = self.prev_actor_loss_value
         for i in range(iter_fit):
             # sample from the replay buffer
-            with catchtime(time_dict, 'sample'):
-                data=self.buffer.sample(batch=self._config['batch_size'])
+            data=self.buffer.sample(batch=self._config['batch_size'])
 
-            with catchtime(time_dict, 'move data'):
-                s = to_torch(np.stack(data[:,0])).to(device) # s_t
-                a = to_torch(np.stack(data[:,1])).to(device) # a_t
-                rew = to_torch(np.stack(data[:,2])[:,None]).to(device) # rew  (batchsize,1)
-                s_prime = to_torch(np.stack(data[:,3])).to(device) # s_t+1
-                done = to_torch(np.stack(data[:,4])[:,None]).to(device) # done signal  (batchsize,1)
+            s = to_torch(np.stack(data[:,0])).to(device) # s_t
+            a = to_torch(np.stack(data[:,1])).to(device) # a_t
+            rew = to_torch(np.stack(data[:,2])[:,None]).to(device) # rew  (batchsize,1)
+            s_prime = to_torch(np.stack(data[:,3])).to(device) # s_t+1
+            done = to_torch(np.stack(data[:,4])[:,None]).to(device) # done signal  (batchsize,1)
             # TODO: Implement the rest of the algorithm
 
             # Optimize critic 
             # Compute the target Q value 
-            q_prime = self.Q1_target.Q_value(s_prime, self.policy_target(s_prime))
+
+            # Target policy smoothing
+            a_prime = self.policy_target(s_prime)
+            target_noise = torch.randn_like(a_prime) * self._config["target_noise"]
+            c = self._config["target_noise_clip"]
+            target_noise = torch.clamp(target_noise, -c, c)
+            smoothed_a_prime = a_prime + target_noise
+
+            q1_prime = self.Q1_target.Q_value(s_prime, smoothed_a_prime)
+            q2_prime = self.Q2_target.Q_value(s_prime, smoothed_a_prime)
+            q_prime = torch.min(q1_prime, q2_prime)
+
             td_target = rew + self._discount * (1.0 - done) * q_prime
 
-            with catchtime(time_dict, 'fit critic'):
-                q_loss_value = self.Q1.fit(s, a, td_target)
+            q1_loss_value = self.Q1.fit(s, a, td_target)
+            q2_loss_value = self.Q2.fit(s, a, td_target)
 
-            # Optimize actor
-            with catchtime(time_dict, 'fit actor'):
+            if self.train_iter % self._config["policy_delay"] == 0:
+                # Optimize actor
                 self.optimizer.zero_grad()
 
                 # Actor loss is negative Q value for current policy
@@ -261,11 +290,11 @@ class DDPGAgent(object):
 
                 actor_loss.backward()
                 self.optimizer.step()
+                actor_loss_value = actor_loss.item()
+                self.prev_actor_loss_value = actor_loss_value
             
             # assign q_loss_value  and actor_loss to we stored in the statistics
-
-            # DDPG has only one Q-network so same value repeated twice
-            losses.append((q_loss_value, q_loss_value, actor_loss.item()))
+            losses.append((q1_loss_value, q2_loss_value, actor_loss_value))
             
             
 
