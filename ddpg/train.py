@@ -1,5 +1,7 @@
 import json
+import laserhockey.hockey_env as h_env
 import gymnasium as gym
+from gymnasium.utils.save_video import save_video
 import numpy as np 
 import optparse
 import pickle
@@ -10,7 +12,11 @@ import wandb
 
 from DDPG import DDPGAgent
 from TD3 import TD3Agent
+import utils
 
+import os
+cwd = os.getcwd()
+print(cwd)
 with open('secrets.json', 'r') as f:
     SECRETS = json.load(f)
 
@@ -55,17 +61,29 @@ def main():
     optParser.add_option('--agent', action='store', type='string',
                           dest='agent', default='TD3',
                           help='Agent to use (DDPG or TD3)')  
+    optParser.add_option('--disable-wandb', action='store_true',
+                          help='Whether to not run the wandb logging.')  
 
     opts, args = optParser.parse_args()
     ############## Hyperparameters ##############
     env_name = opts.env_name
     # creating environment
+    render_mode = "rgb_array"
     if env_name == "LunarLander-v2":
-        env = gym.make(env_name, continuous = True)
+        env = gym.make(env_name, continuous = True, render_mode=render_mode)
+    elif env_name == "HockeyNormal":
+        env = gym.envs.make("Hockey-One-v0", mode=h_env.HockeyEnv.NORMAL)
+    elif env_name == "HockeyWeak":
+        env = gym.envs.make("Hockey-One-v0", mode=h_env.HockeyEnv.NORMAL, weak_opponent=True)
+    elif env_name == "HockeyTrainShooting":
+        env = h_env.HockeyEnv(mode=h_env.HockeyEnv.TRAIN_SHOOTING)
+    elif env_name == "HockeyTrainDefense":
+        env = h_env.HockeyEnv(mode=h_env.HockeyEnv.TRAIN_DEFENSE)
     else:
-        env = gym.make(env_name)
+        env = gym.make(env_name, render_mode="rgb_array_list")
     render = False
     log_interval = 20           # print avg reward in the interval
+    gif_interval = 1000         # create gif sometimes
     max_episodes = opts.max_episodes # max training episodes
     max_timesteps = 2000         # max timesteps in one episode
 
@@ -80,6 +98,7 @@ def main():
     # Parameters for loading and saving models and results
     model_path = opts.model
     results_dir = opts.results_dir
+    disable_wandb = opts.disable_wandb
 
 
     if random_seed is not None:
@@ -108,7 +127,7 @@ def main():
         {"env_name": env_name, "algorithm": opts.agent, "episodes": max_episodes}
     )
 
-    wandb.init(project="the_copilots", config=agent._config)
+    wandb.init(project="the_copilots", config=agent._config, mode="disabled" if disable_wandb else "online")
     wandb.watch((agent.Q1, agent.Q2, agent.policy))
 
     # logging variables
@@ -124,11 +143,13 @@ def main():
 
     # training loop
     for i_episode in range(1, max_episodes+1):
+        frames = []
         start_ts = time.time()
         times = {}
         ob, _info = env.reset()
         agent.reset()
         total_reward=0
+        step_starting_index = timestep
         for t in range(max_timesteps):
             timestep += 1
             done = False
@@ -141,7 +162,13 @@ def main():
             total_reward+= reward
             agent.store_transition((ob, a, reward, ob_new, done))
             ob=ob_new
-            if done or trunc: break
+
+            if i_episode % gif_interval == 0:
+                frame = env.render(mode=render_mode)
+                frames.append(frame)
+
+            if done or trunc: 
+                break
 
         if timestep > update_after:
             episode_losses = agent.train(train_iter, times)
@@ -182,8 +209,16 @@ def main():
             avg_reward = np.mean(rewards[-log_interval:])
             avg_length = int(np.mean(lengths[-log_interval:]))
 
+            
+
             print('Episode {} \t avg length: {} \t reward: {}'.format(i_episode, avg_length, avg_reward))
             print(f"Episode times: {times}")
+        
+        # Save episode as a gif
+        if i_episode % 1 == 0:
+            gif_filename = f"{results_dir}/last_episode.gif"
+            utils.save_frames_as_gif(frames, path="", filename=gif_filename)
+
     save_statistics()
 
 if __name__ == '__main__':

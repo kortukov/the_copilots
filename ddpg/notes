@@ -1,5 +1,5 @@
 # Slurm interactive job with 1 gpu
-srun -p gpu-2080ti --ntasks=1 --cpus-per-task=8 --mem=10G --time=0-04:00 --gres=gpu:1  --pty bash 
+srun -p a100 --ntasks=1 --cpus-per-task=4 --mem=10G --time=0-04:00 --gres=gpu:1  --pty bash 
 
 # Slurm run job in the background
 srun --job-name "train" -p gpu-2080ti --ntasks=1 --cpus-per-task=32 --mem=20G --time=0-14:00 --gres=gpu:1 --output=0_out_train --error=0_err_train sh -c "source ~/.bashrc && conda activate rl && python  train.py -e HalfCheetah-v4 -m 10000 --results-dir results" &
@@ -10,4 +10,4 @@ srun --job-name "train_2" -p gpu-2080ti --ntasks=1 --cpus-per-task=32 --mem=20G 
 
 
 # Slurm run job with sbatch (preferred) replace 0 with some integer
-sbatch -J 0 slurm_train.sh
+sbatch -J 0 --no-requeue slurm_train.sh
