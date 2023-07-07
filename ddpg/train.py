@@ -141,6 +141,12 @@ def main():
             pickle.dump({"rewards" : rewards, "lengths": lengths, "eps": eps, "train": train_iter,
                          "lr": lr, "update_every": opts.update_every, "losses": losses}, f)
 
+    if env_name == "HockeyNormal":
+        player2 = h_env.BasicOpponent(weak=False)   
+    elif env_name == 'HockeyWeak':
+        player2 = h_env.BasicOpponent(weak=True)
+
+
     # training loop
     for i_episode in range(1, max_episodes+1):
         frames = []
@@ -148,6 +154,7 @@ def main():
         times = {}
         ob, _info = env.reset()
         agent.reset()
+        obs_agent2 = env.obs_agent_two()
         total_reward=0
         step_starting_index = timestep
         for t in range(max_timesteps):
@@ -161,7 +168,7 @@ def main():
 
             # Action of opponent
             if env_name == "HockeyNormal" or env_name == "HockeyWeak":
-                a2 = [0,0.,0,0]
+                a2 = player2.act(obs_agent2)
             elif env_name == "HockeyTrainShooting":
                 a2 = [0,0.,0,0]
             elif env_name == "HockeyTrainDefense":
@@ -179,7 +186,8 @@ def main():
                 frames.append(frame)
 
             if done or trunc: 
-                print(_info)
+                if i_episode % log_interval == 0:
+                    print(_info)
                 break
 
         if timestep > update_after:

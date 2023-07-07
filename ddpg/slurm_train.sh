@@ -14,4 +14,4 @@
  conda activate rl 
  echo "Starting job name: $SLURM_JOB_NAME"
 #  python  train.py -e HalfCheetah-v4 -m 10000 --agent TD3 --model results_3/TD3_HalfCheetah-v4_500-eps0.1-t32-l0.0001-s42.pth --results-dir results_$SLURM_JOB_NAME
- python  train.py -e HockeyTrainDefense -m 25000 --agent TD3 --model results_0/TD3_HockeyTrainDefense_2500-eps0.1-t32-l0.0001-s42.pth --results-dir results_$SLURM_JOB_NAME
+ python  train.py -e HockeyTrainShooting -m 25000 --agent TD3 --model results_0/TD3_HockeyTrainDefense_1000-eps0.1-t32-l0.0001-s42.pth --results-dir results_$SLURM_JOB_NAME
