@@ -153,25 +153,14 @@ def main():
         for t in range(max_timesteps):
             timestep += 1
             done = False
-            # Action of main agent
             if timestep > start_steps:
-                a1 = agent.act(ob)
+                a = agent.act(ob)
             else:
-                a1 = env.action_space.sample()
+                a = env.action_space.sample()
 
-            # Action of opponent
-            if env_name == "HockeyNormal" or env_name == "HockeyWeak":
-                a2 = [0,0.,0,0]
-            elif env_name == "HockeyTrainShooting":
-                a2 = [0,0.,0,0]
-            elif env_name == "HockeyTrainDefense":
-                a2 = [0,0.,0,0]
-
-
-            (ob_new, reward, done, trunc, _info) = env.step(np.hstack([a1, a2]))
-            obs_agent2 = env.obs_agent_two()
+            (ob_new, reward, done, trunc, _info) = env.step(a)
             total_reward+= reward
-            agent.store_transition((ob, a1, reward, ob_new, done))
+            agent.store_transition((ob, a, reward, ob_new, done))
             ob=ob_new
 
             if i_episode % gif_interval == 0:
@@ -179,7 +168,6 @@ def main():
                 frames.append(frame)
 
             if done or trunc: 
-                print(_info)
                 break
 
         if timestep > update_after:
