@@ -113,7 +113,7 @@ class TD3Agent(object):
             "eps": 0.1,            # Epsilon: noise strength to add to policy
             "discount": 0.95,
             "buffer_size": int(1e6),
-            "batch_size": 512,
+            "batch_size": 2048,
             "learning_rate_actor": 0.00001,
             "learning_rate_critic": 0.0001,
             "hidden_sizes_actor": [128,128],
