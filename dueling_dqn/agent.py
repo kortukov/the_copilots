@@ -1,41 +1,35 @@
 import os
 import time
 
-import gymnasium as gym
 import numpy as np
 import torch
 import torch.nn as nn
 import torch.optim as optim
-from gymnasium.utils.save_video import save_video
 
+import buffers
 import plots
+import utils
 from model import DuelingDQN
-from utils import DiscreteActionWrapper
-from utils import ReplayBuffer, PrioritizedReplayBuffer
+from shared_constants import EVALUATION_SEEDS, VIDEO_SEEDS
 
 
 class Agent:
     def __init__(self, env_name, args):
         self.env_name = env_name
-
-        self.env = gym.make(env_name)
-        self.env = DiscreteActionWrapper(self.env, args.bins)
-
-        self.eval_env = gym.make(env_name, render_mode="rgb_array_list")
-        self.eval_env = DiscreteActionWrapper(self.eval_env, args.bins)
+        self.env, self.eval_env = utils.get_env(env_name, args.bins)
 
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
         self.model = DuelingDQN(
-            self.env.observation_space.shape, self.env.action_space.n
+            self.env.observation_space.shape, self.env.n, noisy=args.noisy
         ).to(self.device)
         self.target_model = DuelingDQN(
-            self.env.observation_space.shape, self.env.action_space.n
+            self.env.observation_space.shape, self.env.n, noisy=args.noisy
         ).to(self.device)
         self.target_model.load_state_dict(self.model.state_dict())
 
         self.optimizer = optim.Adam(self.model.parameters(), lr=args.learning_rate)
-        self.MSE_loss = nn.MSELoss()
+        self.MSE_loss = nn.MSELoss(reduction="none")
 
         self.gamma = args.gamma
         self.batch_size = args.batch_size
@@ -53,13 +47,13 @@ class Agent:
         self.prioritize = args.prioritize
 
         if self.prioritize:
-            self.replay_buffer = PrioritizedReplayBuffer(
+            self.replay_buffer = buffers.PrioritizedReplayBuffer(
                 args.replay_memory_size,
                 prob_alpha=args.prob_alpha,
                 beta=args.beta_start,
             )
         else:
-            self.replay_buffer = ReplayBuffer(args.replay_memory_size)
+            self.replay_buffer = buffers.ReplayBuffer(args.replay_memory_size)
 
     def decay_epsilon(self):
         self.eps_start = max(self.eps_end, self.eps_start * self.eps_decay)
@@ -72,27 +66,26 @@ class Agent:
         next_states = torch.FloatTensor(next_states).to(self.device)
         dones = torch.FloatTensor(dones).to(self.device)
 
-        curr_Q = self.model.forward(states).gather(1, actions.unsqueeze(1)).squeeze(1)
+        curr_q = self.model.forward(states).gather(1, actions.unsqueeze(1)).squeeze(1)
         next_actions = self.model.forward(next_states).argmax(dim=1)
-        next_Q = (
+        next_q = (
             self.target_model.forward(next_states)
             .gather(1, next_actions.unsqueeze(1))
             .squeeze(1)
         )
-        expected_Q = rewards + (1.0 - dones) * self.gamma * next_Q
+        expected_q = rewards + (1.0 - dones) * self.gamma * next_q
 
         # If weights are not provided (i.e., when using the simple replay buffer)
         if weights is None:
-            loss = self.MSE_loss(curr_Q, expected_Q)
+            loss = self.MSE_loss(curr_q, expected_q).mean()
             return loss, None  # Here we return None for the TD errors
 
         # Compute TD errors for updating priorities
-        td_errors = torch.abs(curr_Q - expected_Q).detach().cpu().numpy()
+        td_errors = torch.abs(curr_q - expected_q).detach().cpu().numpy()
 
         # Compute the weighted loss
         weights = torch.FloatTensor(weights).to(self.device)
-        loss = (weights * self.MSE_loss(curr_Q, expected_Q)).mean()
-
+        loss = (weights * self.MSE_loss(curr_q, expected_q)).mean()
         return loss, td_errors
 
     def update(self, batch_size, prioritize=False):
@@ -123,7 +116,7 @@ class Agent:
                 state = torch.FloatTensor(state).to(self.device)
                 action = self.model(state).argmax().item()
         else:
-            action = self.env.action_space.sample()
+            action = self.env.sample_action()
 
         return action
 
@@ -132,7 +125,7 @@ class Agent:
         os.makedirs(folder, exist_ok=True)
         filename = f"{folder}/{filename}"
         checkpoint = {
-            "env_name": self.env.spec.id,
+            "env_name": self.env_name,
             "state_dict": self.model.state_dict(),
             "optimizer": self.optimizer.state_dict(),
             "episode": episode,
@@ -150,9 +143,12 @@ class Agent:
         self.episode_continue = checkpoint["episode"]
         print(f"Checkpoint loaded from {filename}")
 
-    def evaluate(self, episode_n, test_episodes=2):
+    def evaluate(self, episode_n):
         self.model.eval()
-        for episode in range(test_episodes):
+        mean_rewards = []
+        for seed in EVALUATION_SEEDS:
+            self.eval_env.seed(seed)
+            video_this_seed = seed in VIDEO_SEEDS
             state, _ = self.eval_env.reset()
             total_reward = 0
             episode_length_counter = 0
@@ -164,18 +160,16 @@ class Agent:
                 next_state, reward, done, trunk, info = self.eval_env.step(action)
                 total_reward += reward
                 state = next_state
-                if (episode_length_counter == self.episode_length) or done or trunk:
-                    os.makedirs(f"videos/{self.env_name}", exist_ok=True)
-                    save_video(
-                        self.eval_env.render(),
-                        f"videos/{self.env_name}",
-                        name_prefix=f"{self.env_name}_eval_{episode_n}",
-                        fps=self.eval_env.metadata["render_fps"],
-                        step_starting_index=episode_length_counter,
-                        episode_index=episode,
+                end = (episode_length_counter == self.episode_length) or done or trunk
+                if video_this_seed:
+                    self.eval_env.make_video(
+                        end, episode_length_counter, episode_n, seed
                     )
+                if end:
                     break
                 episode_length_counter += 1
+            mean_rewards.append(total_reward)
+        print(f"\n MEAN EVAL REWARDS: {np.mean(mean_rewards)} \n ")
         self.model.train()
 
     def replay(self, replay_episodes=5):
@@ -190,8 +184,8 @@ class Agent:
         else:
             start_episode = self.episode_continue + 1
 
-        for episode in range(start_episode, self.num_episodes):
-            start_time = time.time()
+            for episode in range(start_episode, self.num_episodes):
+                start_time = time.time()
             state, _ = self.env.reset()
             total_reward = 0
             episode_length_counter = 0
@@ -230,5 +224,6 @@ class Agent:
             if episode % 50 == 0:
                 plots.plot_rewards(episodes_rewards, path=f"plots/{self.env_name}")
                 plots.plot_episode_duration(times, path=f"plots/{self.env_name}")
+                plots.dump_rewards(episodes_rewards, path=f"plots/{self.env_name}")
 
         print("Training completed.")

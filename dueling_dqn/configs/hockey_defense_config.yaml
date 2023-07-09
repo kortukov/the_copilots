@@ -1,17 +1,17 @@
 Args:
   num_episodes: 25000
   batch_size: 128
-  gamma: 0.9
-  initial_epsilon: 0.3
+  gamma: 0.99
+  initial_epsilon: 0.5
   final_epsilon: 0.01
-  decay_rate: 0.9
+  decay_rate: 0.99
   target_update: 10
-  replay_memory_size: 1000000
+  replay_memory_size: 100000
   learning_rate: 0.001
   bins: 10
-  episode_length: 300
+  episode_length: 600
   replay_episodes: 10
-  prioritize: True
-  prob_alpha: 0.6
+  prioritize: true
+  prob_alpha: 0.8
   beta_start: 0.4
-  noisy: false
+  noisy: true

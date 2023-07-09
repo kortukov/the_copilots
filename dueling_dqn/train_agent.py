@@ -1,23 +1,33 @@
 from agent import Agent
 import utils
 import hydra
-from omegaconf import DictConfig
+from omegaconf import DictConfig, OmegaConf
 
 
-@hydra.main(config_path="configs", config_name="cheetah_config.yaml", version_base="1.1")
-def train_agent(cfg: DictConfig) -> None:
+def train(env_name: str, cfg: DictConfig) -> None:
     args = utils.Args(**cfg.Args)
     seed = 42
     utils.set_seed(seed)
 
     # Initialize the environment and agent
-    env_name = "HalfCheetah-v4"
     agent = Agent(env_name, args)
-    # agent.load_checkpoint("checkpoints/checkpoint_1300_HalfCheetah-v4.pth")
     agent.train()
 
-    print("Training completed.")
+    print(f"Training completed for {env_name}.")
+
+
+@hydra.main(config_path="configs")
+def train_agent(cfg: DictConfig) -> None:
+    train(env_name, cfg)
 
 
 if __name__ == "__main__":
-    train_agent()
+    envs_and_configs = [
+        ("HalfCheetah-v4", "cheetah_config.yaml"),
+        ("HockeyTrainDefense", "hockey_defense_config.yaml"),
+        # Add more environments and configs as needed
+    ]
+
+    for env_name, cfg_name in envs_and_configs:
+        cfg = OmegaConf.load(f"configs/{cfg_name}")
+        train_agent(cfg)

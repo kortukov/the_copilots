@@ -1,7 +1,9 @@
-import pandas as pd
-import matplotlib.pyplot as plt
-import seaborn as sns
 import os
+import pickle
+
+import matplotlib.pyplot as plt
+import pandas as pd
+import seaborn as sns
 
 plt.style.use("ggplot")  # Use 'ggplot' style for more appealing visuals
 sns.set_context(
@@ -96,3 +98,16 @@ def plot_episode_duration(times, path="plots", filename="times.svg", window_size
     plt.tight_layout()
     plt.savefig(filename, format="svg")
     plt.close()
+
+
+def dump_rewards(rewards, path, filename="rewards.pkl"):
+    os.makedirs(path, exist_ok=True)
+    filename = os.path.join(path, filename)
+    with open(filename, "wb") as f:
+        pickle.dump(rewards, f)
+
+
+def load_rewards(filename="rewards.pkl"):
+    with open(filename, "rb") as f:
+        rewards = pickle.load(f)
+    return rewards
