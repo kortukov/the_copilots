@@ -1,4 +1,6 @@
+from collections import deque
 import numpy as np
+import numpy_ringbuffer as rb
 import random
 
 # class to store transitions
@@ -33,23 +35,29 @@ class ReplayBuffer:
     """Implementation of a fixed size Replay Buffer."""
 
     def __init__(self, capacity: int):
-        self.buffer = deque(maxlen=capacity)
+        # self.buffer = deque(maxlen=capacity)
+        self.buffer = rb.RingBuffer(capacity, dtype=object)
 
     def push(self, state, action, reward, next_state, done):
         """Add a new experience to memory."""
         state = np.expand_dims(state, 0)
         next_state = np.expand_dims(next_state, 0)
 
-        self.buffer.append((state, action, reward, next_state, done))
+        # self.buffer.append((state, action, reward, next_state, done))
+        self.buffer.append(np.array((state, action, reward, next_state, done), dtype=object))
 
     def sample(self, batch_size):
         """Sample a batch of experiences from memory."""
         state, action, reward, next_state, done = zip(
             *random.sample(self.buffer, batch_size)
         )
-        batch = np.concatenate(state), action, reward, np.concatenate(next_state), done
+        batch = np.concatenate(state), np.array(action), np.array(reward), np.concatenate(next_state), np.array(done)
         indices, weights = None, None # no need for these in non-prioritized replay buffer
         return batch, indices, weights 
+
+    def update_priorities(self, batch_indices, batch_priorities):
+        """For compatibility with prioritized replay buffer."""
+        pass
 
     def __len__(self):
         """Return the current size of internal memory."""
@@ -75,7 +83,8 @@ class PrioritizedReplayBuffer:
         self.prob_alpha = prob_alpha
         self.beta = beta
         self.capacity = capacity
-        self.buffer = deque(maxlen=capacity)
+        # self.buffer = deque(maxlen=capacity)
+        self.buffer = rb.RingBuffer(capacity, dtype=object)
         self.pos = 0
         self.priorities = np.zeros(
             (capacity,), dtype=np.float32
@@ -100,15 +109,11 @@ class PrioritizedReplayBuffer:
 
         if len(self.buffer) < self.capacity:
             self.buffer.append(
-                (state, action, reward, next_state, done)
+                np.array((state, action, reward, next_state, done), dtype=object)
             )  # add new experience to the buffer
         else:
-            self.buffer[self.pos] = (
-                state,
-                action,
-                reward,
-                next_state,
-                done,
+            self.buffer[self.pos] = np.array(
+                (state, action, reward, next_state, done), dtype=object
             )  # overwrite old experience if the buffer is full
 
         self.priorities[
@@ -144,7 +149,7 @@ class PrioritizedReplayBuffer:
 
         # sample indices based on the probabilities
         indices = np.random.choice(len(self.buffer), batch_size, p=probs)
-        samples = [self.buffer[idx] for idx in indices]
+        samples = self.buffer[indices] 
 
         # compute importance sampling weights from the probabilities
         total = len(self.buffer)
@@ -156,10 +161,10 @@ class PrioritizedReplayBuffer:
         return (
             (
                 np.array(states),
-                actions,
-                rewards,
+                np.array(actions),
+                np.array(rewards),
                 np.array(next_states),
-                dones,
+                np.array(dones),
             ),
             indices,
             np.array(weights, dtype=np.float32),

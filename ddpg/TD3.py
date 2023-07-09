@@ -37,21 +37,32 @@ class QFunction(Feedforward):
         self.optimizer=torch.optim.Adam(self.parameters(),
                                         lr=learning_rate,
                                         eps=0.000001)
-        self.loss = torch.nn.SmoothL1Loss()
+        self.loss = torch.nn.SmoothL1Loss(reduction='none')
 
-    def fit(self, observations, actions, targets): # all arguments should be torch tensors
+    def fit(self, observations, actions, targets, weights): # all arguments should be torch tensors
         self.train() # put model in training mode
         self.optimizer.zero_grad()
         # Forward pass
 
         pred = self.Q_value(observations,actions)
+
+        # Compute absolute td-error for PER
+        assert pred.shape == targets.shape
+        td_errors = torch.abs(pred - targets).detach().cpu().numpy() 
+
         # Compute Loss
         loss = self.loss(pred, targets)
+
+        if weights is None:
+            loss = loss.mean()
+        else:
+            assert weights.shape == loss.shape
+            loss = (weights * loss).mean()
 
         # Backward pass
         loss.backward()
         self.optimizer.step()
-        return loss.item()
+        return loss.item(), td_errors
 
     def Q_value(self, observations, actions):
         # TODO: implement the forward pass.
@@ -124,7 +135,7 @@ class TD3Agent(object):
             "target_noise": 0.2,
             "target_noise_clip": 0.5,
             "policy_delay": 2,
-            "prioritized_replay": False,
+            "prioritize": False,
             "replay_prob_alpha": 0.6,
             "replay_beta": 0.4,
         }
@@ -136,10 +147,10 @@ class TD3Agent(object):
 
         # self.buffer = mem.Memory(max_size=self._config["buffer_size"])
 
-        if self._config["prioritized_replay"]:
+        if self._config["prioritize"]:
             self.replay_buffer = mem.PrioritizedReplayBuffer(
                 capacity=self._config["buffer_size"],
-                alpha=self._config["replay_prob_alpha"],
+                prob_alpha=self._config["replay_prob_alpha"],
                 beta=self._config["replay_beta"],
             )
         else:
@@ -267,17 +278,19 @@ class TD3Agent(object):
         actor_loss_value = self.prev_actor_loss_value
         for i in range(iter_fit):
             # sample from the replay buffer
-            data=self.buffer.sample(batch=self._config['batch_size'])
-            batch, indices, weights = self.replay_buffer.sample(self._config['batch_size'])
+            # data=self.buffer.sample(batch_size=self._config['batch_size'])
+            with catchtime(time_dict, 'sample'):
+                batch, indices, weights = self.replay_buffer.sample(self._config['batch_size'])
 
             states, actions, rewards, next_states, dones = batch
-            s = torch.FloatTensor(states).to(self.device)
-            a = torch.LongTensor(actions).to(self.device)
-            rew = torch.FloatTensor(rewards).to(self.device)
-            s_prime = torch.FloatTensor(next_states).to(self.device)
-            done = torch.FloatTensor(dones).to(self.device)
+            s = torch.FloatTensor(states).to(device)
+            a = torch.LongTensor(actions).to(device)
+            rew = torch.FloatTensor(rewards).to(device).reshape(-1,1)
+            s_prime = torch.FloatTensor(next_states).to(device)
+            done = torch.FloatTensor(dones).to(device).reshape(-1,1)
 
-            weights = torch.FloatTensor(weights).to(self.device)
+            if weights is not None:
+                weights = torch.FloatTensor(weights).to(device).reshape(-1,1)
 
             # s = to_torch(np.stack(data[:,0])).to(device) # s_t
             # a = to_torch(np.stack(data[:,1])).to(device) # a_t
@@ -302,9 +315,13 @@ class TD3Agent(object):
 
             td_target = rew + self._discount * (1.0 - done) * q_prime
 
+            with catchtime(time_dict, 'fit Q value'):
+                q1_loss_value, td_errors = self.Q1.fit(s, a, td_target, weights)
+                q2_loss_value, _ = self.Q2.fit(s, a, td_target, weights)
 
-            q1_loss_value, td_errors = self.Q1.fit(s, a, td_target, weights)
-            q2_loss_value, td_errors = self.Q2.fit(s, a, td_target, weights)
+            # Update priorities
+            with catchtime(time_dict, 'update PER'):
+                self.replay_buffer.update_priorities(indices, td_errors)
 
             # Delayed policy updates
             if self.train_iter % self._config["policy_delay"] == 0:
@@ -321,7 +338,7 @@ class TD3Agent(object):
             
             # assign q_loss_value  and actor_loss to we stored in the statistics
             losses.append((q1_loss_value, q2_loss_value, actor_loss_value))
-            
+
             
 
         return losses

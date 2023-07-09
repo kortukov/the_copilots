@@ -5,6 +5,7 @@ from gymnasium.utils.save_video import save_video
 import numpy as np 
 import optparse
 import pickle
+import pathlib
 import time
 from tqdm import tqdm
 import torch
@@ -19,6 +20,8 @@ cwd = os.getcwd()
 print(cwd)
 with open('secrets.json', 'r') as f:
     SECRETS = json.load(f)
+
+HOCKEY_ENVS = {"HockeyNormal", "HockeyWeak", "HockeyTrainShooting", "HockeyTrainDefense"}
 
 def main():
     optParser = optparse.OptionParser()
@@ -41,7 +44,7 @@ def main():
                          dest='start_steps',default=10000,
                          help='Number of steps to sample random actions before training (default %default)')
     optParser.add_option('--update-after',action='store',  type='int',
-                         dest='update_after',default=1000,
+                         dest='update_after',default=2049,
                          help='After which timestep to start training (to ensure fullness of replay buffer)')
     optParser.add_option('-u', '--update',action='store',  type='float',
                          dest='update_every',default=100,
@@ -63,6 +66,9 @@ def main():
                           help='Agent to use (DDPG or TD3)')  
     optParser.add_option('--disable-wandb', action='store_true',
                           help='Whether to not run the wandb logging.')  
+    optParser.add_option('--prioritize', action='store_true',
+                        help='Whether to use prioritized replay buffer.')  
+
 
     opts, args = optParser.parse_args()
     ############## Hyperparameters ##############
@@ -80,7 +86,7 @@ def main():
     elif env_name == "HockeyTrainDefense":
         env = h_env.HockeyEnv(mode=h_env.HockeyEnv.TRAIN_DEFENSE)
     else:
-        env = gym.make(env_name, render_mode="rgb_array_list")
+        env = gym.make(env_name, render_mode="rgb_array")
     render = False
     log_interval = 20           # print avg reward in the interval
     gif_interval = 1000         # create gif sometimes
@@ -92,6 +98,7 @@ def main():
     lr  = opts.lr                # learning rate of DDPG policy
     start_steps = opts.start_steps # Steps sampling random actions
     update_after = opts.update_after # After which timestep to start training (to ensure fullness of replay buffer)
+    prioritize = opts.prioritize # Whether to use prioritized replay buffer
 
     random_seed = opts.seed
     #############################################
@@ -100,17 +107,26 @@ def main():
     results_dir = opts.results_dir
     disable_wandb = opts.disable_wandb
 
+    # Create results directory
+    pathlib.Path(results_dir).mkdir(parents=True, exist_ok=True)
 
     if random_seed is not None:
         torch.manual_seed(random_seed)
         np.random.seed(random_seed)
 
+    # Additional agent parameters
+    agent_params = {
+        "eps": eps,
+        "learning_rate_actor": lr,
+        "update_target_every": opts.update_every,
+        "polyak": opts.polyak,
+        "prioritize": prioritize
+    }
+
     if opts.agent == "DDPG": 
-        agent = DDPGAgent(env.observation_space, env.action_space, eps = eps, learning_rate_actor = lr,
-                        update_target_every = opts.update_every, polyak = opts.polyak)
+        agent = DDPGAgent(env.observation_space, env.action_space, **agent_params)
     elif opts.agent == "TD3":
-        agent = TD3Agent(env.observation_space, env.action_space, eps = eps, learning_rate_actor = lr,
-                        update_target_every = opts.update_every, polyak = opts.polyak)
+        agent = TD3Agent(env.observation_space, env.action_space, **agent_params)
     else:
         raise ValueError(f"Unknown agent {opts.agent}")
 
@@ -154,7 +170,8 @@ def main():
         times = {}
         ob, _info = env.reset()
         agent.reset()
-        obs_agent2 = env.obs_agent_two()
+        if env_name in HOCKEY_ENVS:
+            obs_agent2 = env.obs_agent_two()
         total_reward=0
         step_starting_index = timestep
         for t in range(max_timesteps):
@@ -174,15 +191,21 @@ def main():
             elif env_name == "HockeyTrainDefense":
                 a2 = [0,0.,0,0]
 
+            if env_name in HOCKEY_ENVS:
+                (ob_new, reward, done, trunc, _info) = env.step(np.hstack([a1, a2]))
+                obs_agent2 = env.obs_agent_two()
+            else:
+                (ob_new, reward, done, trunc, _info) = env.step(a1)
 
-            (ob_new, reward, done, trunc, _info) = env.step(np.hstack([a1, a2]))
-            obs_agent2 = env.obs_agent_two()
             total_reward+= reward
             agent.store_transition((ob, a1, reward, ob_new, done))
             ob=ob_new
 
             if i_episode % gif_interval == 0:
-                frame = env.render(mode=render_mode)
+                if env_name in HOCKEY_ENVS:
+                    frame = env.render(mode=render_mode)
+                else:
+                    frame = env.render()
                 frames.append(frame)
 
             if done or trunc: 
