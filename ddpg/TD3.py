@@ -124,6 +124,9 @@ class TD3Agent(object):
             "target_noise": 0.2,
             "target_noise_clip": 0.5,
             "policy_delay": 2,
+            "prioritized_replay": False,
+            "replay_prob_alpha": 0.6,
+            "replay_beta": 0.4,
         }
         self._config.update(userconfig)
         self._eps = self._config['eps']
@@ -131,7 +134,16 @@ class TD3Agent(object):
 
         self.action_noise = OUNoise((self._action_n))
 
-        self.buffer = mem.Memory(max_size=self._config["buffer_size"])
+        # self.buffer = mem.Memory(max_size=self._config["buffer_size"])
+
+        if self._config["prioritized_replay"]:
+            self.replay_buffer = mem.PrioritizedReplayBuffer(
+                capacity=self._config["buffer_size"],
+                alpha=self._config["replay_prob_alpha"],
+                beta=self._config["replay_beta"],
+            )
+        else:
+            self.replay_buffer = mem.ReplayBuffer(capacity=self._config["buffer_size"])
 
         # Q Network
         self.Q1 = QFunction(observation_dim=self._obs_dim,
@@ -227,7 +239,9 @@ class TD3Agent(object):
 
 
     def store_transition(self, transition):
-        self.buffer.add_transition(transition)
+        state, action, reward, next_state, done = transition
+        self.replay_buffer.push(state, action, reward, next_state, done)
+        # self.buffer.add_transition(transition)
 
     def state(self):
         return (self.Q1.state_dict(), self.Q2.state_dict(), self.policy.state_dict())
@@ -254,13 +268,22 @@ class TD3Agent(object):
         for i in range(iter_fit):
             # sample from the replay buffer
             data=self.buffer.sample(batch=self._config['batch_size'])
+            batch, indices, weights = self.replay_buffer.sample(self._config['batch_size'])
 
-            s = to_torch(np.stack(data[:,0])).to(device) # s_t
-            a = to_torch(np.stack(data[:,1])).to(device) # a_t
-            rew = to_torch(np.stack(data[:,2])[:,None]).to(device) # rew  (batchsize,1)
-            s_prime = to_torch(np.stack(data[:,3])).to(device) # s_t+1
-            done = to_torch(np.stack(data[:,4])[:,None]).to(device) # done signal  (batchsize,1)
-            # TODO: Implement the rest of the algorithm
+            states, actions, rewards, next_states, dones = batch
+            s = torch.FloatTensor(states).to(self.device)
+            a = torch.LongTensor(actions).to(self.device)
+            rew = torch.FloatTensor(rewards).to(self.device)
+            s_prime = torch.FloatTensor(next_states).to(self.device)
+            done = torch.FloatTensor(dones).to(self.device)
+
+            weights = torch.FloatTensor(weights).to(self.device)
+
+            # s = to_torch(np.stack(data[:,0])).to(device) # s_t
+            # a = to_torch(np.stack(data[:,1])).to(device) # a_t
+            # rew = to_torch(np.stack(data[:,2])[:,None]).to(device) # rew  (batchsize,1)
+            # s_prime = to_torch(np.stack(data[:,3])).to(device) # s_t+1
+            # done = to_torch(np.stack(data[:,4])[:,None]).to(device) # done signal  (batchsize,1)
 
             # Optimize critic 
             # Compute the target Q value 
@@ -272,15 +295,18 @@ class TD3Agent(object):
             target_noise = torch.clamp(target_noise, -c, c)
             smoothed_a_prime = a_prime + target_noise
 
+            # Clipped double Q-learning
             q1_prime = self.Q1_target.Q_value(s_prime, smoothed_a_prime)
             q2_prime = self.Q2_target.Q_value(s_prime, smoothed_a_prime)
             q_prime = torch.min(q1_prime, q2_prime)
 
             td_target = rew + self._discount * (1.0 - done) * q_prime
 
-            q1_loss_value = self.Q1.fit(s, a, td_target)
-            q2_loss_value = self.Q2.fit(s, a, td_target)
 
+            q1_loss_value, td_errors = self.Q1.fit(s, a, td_target, weights)
+            q2_loss_value, td_errors = self.Q2.fit(s, a, td_target, weights)
+
+            # Delayed policy updates
             if self.train_iter % self._config["policy_delay"] == 0:
                 # Optimize actor
                 self.optimizer.zero_grad()

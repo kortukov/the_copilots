@@ -72,9 +72,9 @@ def main():
     if env_name == "LunarLander-v2":
         env = gym.make(env_name, continuous = True, render_mode=render_mode)
     elif env_name == "HockeyNormal":
-        env = gym.envs.make("Hockey-One-v0", mode=h_env.HockeyEnv.NORMAL)
+        env = h_env.HockeyEnv(mode=h_env.HockeyEnv.NORMAL)
     elif env_name == "HockeyWeak":
-        env = gym.envs.make("Hockey-One-v0", mode=h_env.HockeyEnv.NORMAL, weak_opponent=True)
+        env = h_env.HockeyEnv(mode=h_env.HockeyEnv.NORMAL)
     elif env_name == "HockeyTrainShooting":
         env = h_env.HockeyEnv(mode=h_env.HockeyEnv.TRAIN_SHOOTING)
     elif env_name == "HockeyTrainDefense":
