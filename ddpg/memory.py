@@ -107,15 +107,12 @@ class PrioritizedReplayBuffer:
             self.priorities.max() if self.buffer else 1.0
         )  # max priority for the new experience
 
-        if len(self.buffer) < self.capacity:
-            self.buffer.append(
-                np.array((state, action, reward, next_state, done), dtype=object)
-            )  # add new experience to the buffer
-        else:
-            self.buffer[self.pos] = np.array(
-                (state, action, reward, next_state, done), dtype=object
-            )  # overwrite old experience if the buffer is full
+        self.buffer.append(
+            np.array((state, action, reward, next_state, done), dtype=object)
+        )  # add new experience to the buffer
 
+        self.pos = len(self.buffer) - 1  # update the position index
+        
         self.priorities[
             self.pos
         ] = max_prio  # assign max priority to the new experience
@@ -141,7 +138,7 @@ class PrioritizedReplayBuffer:
         if len(self.buffer) == self.capacity:
             prios = self.priorities
         else:
-            prios = self.priorities[: self.pos]
+            prios = self.priorities[: len(self.buffer)]
 
         # compute sampling probabilities from the priorities
         probs = prios**self.prob_alpha
