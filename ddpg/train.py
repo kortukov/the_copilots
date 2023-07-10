@@ -68,6 +68,8 @@ def main():
                           help='Whether to not run the wandb logging.')  
     optParser.add_option('--prioritize', action='store_true',
                         help='Whether to use prioritized replay buffer.')  
+    optParser.add_option('--old-memory', action='store_true',
+                        help='Whether to use old memory implementation.')  
 
 
     opts, args = optParser.parse_args()
@@ -98,7 +100,6 @@ def main():
     lr  = opts.lr                # learning rate of DDPG policy
     start_steps = opts.start_steps # Steps sampling random actions
     update_after = opts.update_after # After which timestep to start training (to ensure fullness of replay buffer)
-    prioritize = opts.prioritize # Whether to use prioritized replay buffer
 
     random_seed = opts.seed
     #############################################
@@ -120,7 +121,8 @@ def main():
         "learning_rate_actor": lr,
         "update_target_every": opts.update_every,
         "polyak": opts.polyak,
-        "prioritize": prioritize
+        "prioritize": opts.prioritize,
+        "old_memory": opts.old_memory,
     }
 
     if opts.agent == "DDPG": 

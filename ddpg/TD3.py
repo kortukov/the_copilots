@@ -136,6 +136,7 @@ class TD3Agent(object):
             "target_noise_clip": 0.5,
             "policy_delay": 2,
             "prioritize": False,
+            "old_memory": False,
             "replay_prob_alpha": 0.6,
             "replay_beta": 0.4,
         }
@@ -145,9 +146,9 @@ class TD3Agent(object):
 
         self.action_noise = OUNoise((self._action_n))
 
-        # self.buffer = mem.Memory(max_size=self._config["buffer_size"])
-
-        if self._config["prioritize"]:
+        if self._config["old_memory"]:
+            self.replay_buffer = mem.Memory(max_size=self._config["buffer_size"])
+        elif self._config["prioritize"]:
             self.replay_buffer = mem.PrioritizedReplayBuffer(
                 capacity=self._config["buffer_size"],
                 prob_alpha=self._config["replay_prob_alpha"],
@@ -252,7 +253,6 @@ class TD3Agent(object):
     def store_transition(self, transition):
         state, action, reward, next_state, done = transition
         self.replay_buffer.push(state, action, reward, next_state, done)
-        # self.buffer.add_transition(transition)
 
     def state(self):
         return (self.Q1.state_dict(), self.Q2.state_dict(), self.policy.state_dict())

@@ -11,25 +11,40 @@ class Memory():
         self.current_idx = 0
         self.max_size=max_size
 
-    def add_transition(self, transitions_new):
+    def push(self, state, action, reward, next_state, done):
+        transition_new = (state, action, reward, next_state, done)
         if self.size == 0:
-            blank_buffer = [np.asarray(transitions_new, dtype=object)] * self.max_size
+            blank_buffer = [np.asarray(transition_new, dtype=object)] * self.max_size
             self.transitions = np.asarray(blank_buffer)
 
-        self.transitions[self.current_idx,:] = np.asarray(transitions_new, dtype=object)
+        self.transitions[self.current_idx,:] = np.asarray(transition_new, dtype=object)
         self.size = min(self.size + 1, self.max_size)
         self.current_idx = (self.current_idx + 1) % self.max_size
 
-    def sample(self, batch=1):
-        if batch > self.size:
-            batch = self.size
+    def sample(self, batch_size: int = 1, beta: float = None):
+        if batch_size > self.size:
+            batch_size = self.size
         # self.inds=np.random.choice(range(self.size), size=batch, replace=False)
         # This is much faster than np.random.choice
-        self.inds=random.sample(range(self.size), k=batch)
-        return self.transitions[self.inds,:]
+        self.inds=random.sample(range(self.size), k=batch_size)
+        samples = self.transitions[self.inds, :]
+        # return self.transitions[self.inds,:], None, None
+
+        state, action, reward, next_state, done = zip(*samples)
+        batch = np.array(state), np.array(action), np.array(reward), np.array(next_state), np.array(done)
+        indices, weights = None, None # no need for these in non-prioritized replay buffer
+        return batch, indices, weights 
+
+    def update_priorities(self, batch_indices, batch_priorities):
+        """For compatibility with prioritized replay buffer."""
+        pass
 
     def get_all_transitions(self):
         return self.transitions[0:self.size]
+
+    def __len__(self):
+        """Return the current size of internal memory."""
+        return len(self.transitions)
 
 class ReplayBuffer:
     """Implementation of a fixed size Replay Buffer."""
