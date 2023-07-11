@@ -120,10 +120,19 @@ class DDPGAgent(object):
             "update_target_every": 100,
             "use_target_net": True,
             "polyak": None,
+            "is_hockey_env": False,
         }
         self._config.update(userconfig)
         self._eps = self._config['eps']
         self._discount = self._config['discount']
+
+        if self._config["is_hockey_env"]:
+            self._action_n = self._action_n // 2
+            self._action_space_low = self._action_space.low[:self._action_n]
+            self._action_space_high = self._action_space.high[:self._action_n]
+        else:
+            self._action_space_low = self._action_space.low
+            self._action_space_high = self._action_space.high
 
         self.action_noise = OUNoise((self._action_n))
 
@@ -145,7 +154,7 @@ class DDPGAgent(object):
         for param in self.Q1_target.parameters():
             param.requires_grad = False
 
-        high, low = torch.from_numpy(self._action_space.high).to(device), torch.from_numpy(self._action_space.low).to(device)
+        high, low = torch.from_numpy(self._action_space_high).to(device), torch.from_numpy(self._action_space_low).to(device)
         # TODO:
         # The activation function of the policy should limit the output the action space
         # and makes sure the derivative goes to zero at the boundaries
@@ -207,6 +216,9 @@ class DDPGAgent(object):
         action = self.policy(observation).cpu().detach().numpy()
         return action + eps * self.action_noise()
 
+    def random_action(self):
+        action = self._action_space.sample()
+        return action[:self._action_n]
 
     def store_transition(self, transition):
         self.buffer.add_transition(transition)

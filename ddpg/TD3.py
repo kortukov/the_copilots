@@ -136,13 +136,22 @@ class TD3Agent(object):
             "target_noise_clip": 0.5,
             "policy_delay": 2,
             "prioritize": False,
-            "old_memory": False,
+            "old_memory": True,
             "replay_prob_alpha": 0.6,
             "replay_beta": 0.4,
+            "is_hockey_env": False,
         }
         self._config.update(userconfig)
         self._eps = self._config['eps']
         self._discount = self._config['discount']
+
+        if self._config["is_hockey_env"]:
+            self._action_n = self._action_n // 2
+            self._action_space_low = self._action_space.low[:self._action_n]
+            self._action_space_high = self._action_space.high[:self._action_n]
+        else:
+            self._action_space_low = self._action_space.low
+            self._action_space_high = self._action_space.high
 
         self.action_noise = OUNoise((self._action_n))
 
@@ -181,7 +190,7 @@ class TD3Agent(object):
         for param in itertools.chain(self.Q1_target.parameters(), self.Q2_target.parameters()):
             param.requires_grad = False
 
-        high, low = torch.from_numpy(self._action_space.high).to(device), torch.from_numpy(self._action_space.low).to(device)
+        high, low = torch.from_numpy(self._action_space_high).to(device), torch.from_numpy(self._action_space_low).to(device)
         # TODO:
         # The activation function of the policy should limit the output the action space
         # and makes sure the derivative goes to zero at the boundaries
@@ -249,6 +258,9 @@ class TD3Agent(object):
         action = self.policy(observation).cpu().detach().numpy()
         return action + eps * self.action_noise()
 
+    def random_action(self):
+        action = self._action_space.sample()
+        return action[:self._action_n]
 
     def store_transition(self, transition):
         state, action, reward, next_state, done = transition

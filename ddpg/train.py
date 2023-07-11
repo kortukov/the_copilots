@@ -55,6 +55,9 @@ def main():
     optParser.add_option('-s', '--seed',action='store',  type='int',
                          dest='seed',default=42,
                          help='random seed (default %default)')
+    optParser.add_option('--gif-interval', action='store',  type='int',
+                         dest='gif_interval', default=1000,
+                         help='Interval between gif generations (default %default)')
     optParser.add_option('--model', action='store', type='string',
                         dest='model', default=None,
                         help='Path to load a model checkpoint from')
@@ -68,8 +71,6 @@ def main():
                           help='Whether to not run the wandb logging.')  
     optParser.add_option('--prioritize', action='store_true',
                         help='Whether to use prioritized replay buffer.')  
-    optParser.add_option('--old-memory', action='store_true',
-                        help='Whether to use old memory implementation.')  
 
 
     opts, args = optParser.parse_args()
@@ -90,8 +91,8 @@ def main():
     else:
         env = gym.make(env_name, render_mode="rgb_array")
     render = False
-    log_interval = 20           # print avg reward in the interval
-    gif_interval = 1000         # create gif sometimes
+    log_interval = 100           # print avg reward in the interval
+    gif_interval = opts.gif_interval         # create gif sometimes
     max_episodes = opts.max_episodes # max training episodes
     max_timesteps = 2000         # max timesteps in one episode
 
@@ -122,7 +123,7 @@ def main():
         "update_target_every": opts.update_every,
         "polyak": opts.polyak,
         "prioritize": opts.prioritize,
-        "old_memory": opts.old_memory,
+        "is_hockey_env": env_name in HOCKEY_ENVS,
     }
 
     if opts.agent == "DDPG": 
@@ -183,15 +184,15 @@ def main():
             if timestep > start_steps:
                 a1 = agent.act(ob)
             else:
-                a1 = env.action_space.sample()
+                a1 = agent.random_action()# env.action_space.sample()
 
             # Action of opponent
             if env_name == "HockeyNormal" or env_name == "HockeyWeak":
                 a2 = player2.act(obs_agent2)
             elif env_name == "HockeyTrainShooting":
-                a2 = [0,0.,0,0]
+                a2 = [0, 0., 0, 0]
             elif env_name == "HockeyTrainDefense":
-                a2 = [0,0.,0,0]
+                a2 = [0, 0. ,0 , 0]
 
             if env_name in HOCKEY_ENVS:
                 (ob_new, reward, done, trunc, _info) = env.step(np.hstack([a1, a2]))
@@ -211,8 +212,6 @@ def main():
                 frames.append(frame)
 
             if done or trunc: 
-                if i_episode % log_interval == 0:
-                    print(_info)
                 break
 
         if timestep > update_after:
