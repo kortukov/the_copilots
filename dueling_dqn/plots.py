@@ -4,6 +4,7 @@ import pickle
 import matplotlib.pyplot as plt
 import pandas as pd
 import seaborn as sns
+import numpy as np
 
 plt.style.use("ggplot")  # Use 'ggplot' style for more appealing visuals
 sns.set_context(
@@ -100,7 +101,49 @@ def plot_episode_duration(times, path="plots", filename="times.svg", window_size
     plt.close()
 
 
-def dump_rewards(rewards, path, filename="rewards.pkl"):
+def plot_hockey(wins, losses, ties, path="plots"):
+    """Plot normalized cumulative wins, losses, and ties.
+
+    Args:
+        wins (list): List of wins over time.
+        losses (list): List of losses over time.
+        ties (list): List of ties over time.
+        path (str): Path to the directory where the plot will be saved.
+
+    The plot is saved as a .svg file with the name "hockey_plot.svg".
+    """
+    os.makedirs(path, exist_ok=True)
+    filename = os.path.join(path, "hockey_plot.svg")
+
+    plt.figure(figsize=(16, 10))
+
+    # Convert to numpy arrays for easier calculation
+    wins = np.cumsum(np.array(wins))
+    losses = np.cumsum(np.array(losses))
+    ties = np.cumsum(np.array(ties))
+
+    total_games = wins + losses + ties
+
+    plt.plot(wins / total_games, label="Wins", alpha=0.6, color="dodgerblue")
+    plt.plot(losses / total_games, label="Losses", color="darkorange", alpha=0.6)
+    plt.plot(ties / total_games, label="Ties", color="grey", alpha=0.6)
+
+    plt.title(
+        "Normalized Cumulative Wins, Losses, and Ties Over Time",
+        fontsize=24,
+        fontweight="bold",
+        color="dimgrey",
+    )
+    plt.xlabel("Game", fontsize=18, color="dimgrey")
+    plt.ylabel("Normalized Cumulative Results", fontsize=18, color="dimgrey")
+    plt.legend(loc="upper left", fontsize=16)
+    plt.grid(True, linestyle="--", alpha=0.6)
+    plt.tight_layout()
+    plt.savefig(filename, format="svg")
+    plt.close()
+
+
+def dump_array(rewards, path, filename="rewards.pkl"):
     os.makedirs(path, exist_ok=True)
     filename = os.path.join(path, filename)
     with open(filename, "wb") as f:

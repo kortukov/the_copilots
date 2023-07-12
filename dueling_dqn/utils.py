@@ -26,8 +26,8 @@ class Args:
         Final value of epsilon for the epsilon-greedy action selection policy.
     decay_rate : float
         Decay rate for epsilon.
-    target_update : int
-        Frequency (number of steps) for updating the target network.
+    tau : float
+        Rate for updating the target network.
     replay_memory_size : int
         Size of the replay memory.
     learning_rate : float
@@ -116,7 +116,6 @@ CUSTOM_HOCKEY_ACTIONS = [
     [1, 1, -1, 0],
     [1, 1, 1, 0],
     [0, 0, 0, 1],
-    [0, 0, 0, -1],
 ]
 
 

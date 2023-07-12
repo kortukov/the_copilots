@@ -9,6 +9,57 @@ import utils
 from shared_utils import save_frames_as_gif
 
 
+def calculate_rewards(observation):
+    # Unpack observation values
+    player1_pos = np.array([observation[0], observation[1]])
+    player1_angle = observation[2]
+    player1_vel = np.array([observation[3], observation[4]])
+    player1_angular_vel = observation[5]
+
+    player2_pos = np.array([observation[6], observation[7]])
+    player2_angle = observation[8]
+    player2_vel = np.array([observation[9], observation[10]])
+    player2_angular_vel = observation[11]
+
+    puck_pos = np.array([observation[12], observation[13]])
+    puck_vel = np.array([observation[14], observation[15]])
+
+    puck_possession_time_player1 = observation[16]
+    puck_possession_time_player2 = observation[17]
+
+    # Initialize reward
+    reward = 0
+
+    # Reward for puck possession time
+    reward += puck_possession_time_player1 - puck_possession_time_player2
+
+    # Reward for puck direction towards opponent's goal
+    if puck_vel[0] > 0:
+        reward += 1
+
+    # Reward for puck being in the opponent's half
+    if puck_pos[0] > 0:
+        reward += 1
+
+    # Negative reward for distance to the puck
+    reward -= np.linalg.norm(player1_pos - puck_pos)
+
+    # Reward for agent speed towards puck
+    vec_to_puck = puck_pos - player1_pos
+    if np.dot(player1_vel, vec_to_puck) < 0:
+        reward += 1
+
+    # Negative reward for high player speed (energy conservation)
+    reward -= np.linalg.norm(player1_vel)
+
+    # Reward for facing towards the puck
+    direction_to_puck = np.arctan2(vec_to_puck[1], vec_to_puck[0])
+    angle_diff = player1_angle - direction_to_puck
+    reward += np.cos(angle_diff)
+
+    return reward
+
+
 class AdaptedHockeyEnv(hockey_env.HockeyEnv):
     def reset(self, *args, **kwargs):
         acceptable_keys = {"one_starting", "mode"}
@@ -26,6 +77,7 @@ class EnvWrapper:
         self.bins = bins
 
         if "Hockey" in env_name:
+            self.touching_puck = 0
             if env_name == "HockeyTrainDefense":
                 self.env = AdaptedHockeyEnv(mode=hockey_env.HockeyEnv.TRAIN_DEFENSE)
             elif env_name == "HockeyTrainShooting":
@@ -46,6 +98,7 @@ class EnvWrapper:
                     gym.make(env_name), bins=self.bins
                 )
         self.frames = []
+        self.episode_step = 0
 
     @property
     def n(self):
@@ -75,11 +128,12 @@ class EnvWrapper:
         return self.env.metadata
 
     def reset(self):
+        self.episode_step = 0
         return self.env.reset()
 
     def step(self, action):
         if "Hockey" not in self.env_name:
-            return self.env.step(action)
+            next_state, reward, done, trunk, info = self.env.step(action)
         else:
             cont_action = utils.CUSTOM_HOCKEY_ACTIONS[action]
             if self.env_name in ["HockeyTrainDefense", "HockeyTrainShooting"]:
@@ -87,7 +141,30 @@ class EnvWrapper:
             else:
                 obs_p2 = self.env.obs_agent_two()
                 cont_action = np.hstack([cont_action, self.player2.act(obs_p2)])
-            return self.env.step(cont_action)
+            next_state, reward, done, trunk, info = self.env.step(cont_action)
+            winner = info["winner"]
+            if winner == 0:
+                if done:
+                    winner = -0.3  # encourage winning
+                else:
+                    winner = -0.001 * self.episode_step  # pushing to play aggressively
+            # if self.touching_puck == 0:
+            #     puck_reward = (
+            #         info["reward_touch_puck"]
+            #     )  # encourage going for the puck
+            # else:
+            #     puck_reward = -0.1  # encourage not holding the puck
+            # self.touching_puck = info["reward_touch_puck"]
+            # reward = (
+            #     winner * 10
+            #     + info["reward_closeness_to_puck"] * 5
+            #     + info["reward_puck_direction"]
+            #     + puck_reward * 2
+            #     + (1 - self.touching_puck) * 0.1
+            # )
+            reward = winner * 100 + calculate_rewards(next_state)
+            self.episode_step += 1
+        return next_state, reward, done, trunk, info
 
     def render(self):
         return self.env.render()
