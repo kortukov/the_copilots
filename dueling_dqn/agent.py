@@ -162,6 +162,12 @@ class Agent:
     def evaluate(self):
         self.model.eval()
         mean_rewards = []
+
+        if "Hockey" in self.env_name:
+            wins_counter = 0
+            loose_counter = 0
+            tie_counter = 0
+
         for seed in EVALUATION_SEEDS:
             self.eval_env.seed(seed)
             video_this_seed = seed in VIDEO_SEEDS
@@ -173,7 +179,9 @@ class Agent:
                 action = (
                     self.model(torch.FloatTensor(state).to(self.device)).argmax().item()
                 )
-                next_state, reward, done, trunk, info = self.eval_env.step(action)
+                next_state, reward, done, trunk, info = self.eval_env.step(
+                    action, eval=True
+                )
                 total_reward += reward
                 state = next_state
                 end = (episode_length_counter == self.episode_length) or done or trunk
@@ -185,7 +193,20 @@ class Agent:
                     break
                 episode_length_counter += 1
             mean_rewards.append(total_reward)
+
+            if "Hockey" in self.env_name:
+                if info["winner"] == 0:
+                    tie_counter += 1
+                elif info["winner"] == 1:
+                    wins_counter += 1
+                else:
+                    loose_counter += 1
         print(f"\n MEAN EVAL REWARDS: {np.mean(mean_rewards)} \n ")
+        if "Hockey" in self.env_name:
+            print(wins_counter, loose_counter, tie_counter)
+            print(f"\n WINS: {100 * wins_counter / len(EVALUATION_SEEDS)} % \n ")
+            print(f"\n LOOSES: {100 * loose_counter/ len(EVALUATION_SEEDS)} % \n ")
+            print(f"\n TIES: {100 * tie_counter/ len(EVALUATION_SEEDS)} % \n ")
         self.model.train()
 
     def replay(self, replay_episodes=5):

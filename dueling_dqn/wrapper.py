@@ -131,10 +131,10 @@ class EnvWrapper:
         self.episode_step = 0
         return self.env.reset()
 
-    def step(self, action):
+    def step(self, action, eval=False):
         if "Hockey" not in self.env_name:
             next_state, reward, done, trunk, info = self.env.step(action)
-        else:
+        elif not eval:
             cont_action = utils.CUSTOM_HOCKEY_ACTIONS[action]
             if self.env_name in ["HockeyTrainDefense", "HockeyTrainShooting"]:
                 cont_action = np.hstack([cont_action, [0, 0, 0, 0]])
@@ -148,22 +148,16 @@ class EnvWrapper:
                     winner = -0.3  # encourage winning
                 else:
                     winner = -0.001 * self.episode_step  # pushing to play aggressively
-            # if self.touching_puck == 0:
-            #     puck_reward = (
-            #         info["reward_touch_puck"]
-            #     )  # encourage going for the puck
-            # else:
-            #     puck_reward = -0.1  # encourage not holding the puck
-            # self.touching_puck = info["reward_touch_puck"]
-            # reward = (
-            #     winner * 10
-            #     + info["reward_closeness_to_puck"] * 5
-            #     + info["reward_puck_direction"]
-            #     + puck_reward * 2
-            #     + (1 - self.touching_puck) * 0.1
-            # )
             reward = winner * 100 + calculate_rewards(next_state)
             self.episode_step += 1
+        else:
+            cont_action = utils.CUSTOM_HOCKEY_ACTIONS[action]
+            if self.env_name in ["HockeyTrainDefense", "HockeyTrainShooting"]:
+                cont_action = np.hstack([cont_action, [0, 0, 0, 0]])
+            else:
+                obs_p2 = self.env.obs_agent_two()
+                cont_action = np.hstack([cont_action, self.player2.act(obs_p2)])
+            next_state, reward, done, trunk, info = self.env.step(cont_action)
         return next_state, reward, done, trunk, info
 
     def render(self):
