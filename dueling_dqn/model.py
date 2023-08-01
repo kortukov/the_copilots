@@ -16,21 +16,21 @@ class NoisyLinear(nn.Module):
         self.out_features = out_features
         self.noisy = noisy
 
-        self.weight_mu = nn.Parameter(torch.empty(out_features, in_features))
-        self.weight_sigma = nn.Parameter(torch.empty(out_features, in_features))
-        self.register_buffer("weight_epsilon", torch.empty(out_features, in_features))
+        self.weight_mu = nn.Parameter(torch.empty(self.out_features, self.in_features))
+        self.weight_sigma = nn.Parameter(torch.empty(self.out_features, self.in_features))
+        self.register_buffer("weight_epsilon", torch.empty(self.out_features, self.in_features))
 
-        self.bias_mu = nn.Parameter(torch.empty(out_features))
-        self.bias_sigma = nn.Parameter(torch.empty(out_features))
-        self.register_buffer("bias_epsilon", torch.empty(out_features))
+        self.bias_mu = nn.Parameter(torch.empty(self.out_features))
+        self.bias_sigma = nn.Parameter(torch.empty(self.out_features))
+        self.register_buffer("bias_epsilon", torch.empty(self.out_features))
 
         nn.init.uniform_(
             self.weight_mu,
-            a=-np.sqrt(3 / in_features),
-            b=np.sqrt(3 / in_features),
+            a=-np.sqrt(3 / self.in_features),
+            b=np.sqrt(3 / self.in_features),
         )
         nn.init.uniform_(
-            self.bias_mu, a=-np.sqrt(3 / in_features), b=np.sqrt(3 / in_features)
+            self.bias_mu, a=-np.sqrt(3 / self.in_features), b=np.sqrt(3 / self.in_features)
         )
 
         nn.init.constant_(self.weight_sigma, 0.017)  # following original paper
@@ -53,28 +53,28 @@ class NoisyLinear(nn.Module):
 class DuelingDQN(nn.Module):
     def __init__(self, input_dim, output_dim, noisy=True):
         super(DuelingDQN, self).__init__()
-        self.input_dim = input_dim
+        self.input_dim = input_dim[0]
         self.output_dim = output_dim
 
         self.feature_layer = nn.Sequential(
-            NoisyLinear(self.input_dim[0], 128, noisy),
+            NoisyLinear(self.input_dim, 256, noisy),
             nn.ReLU(),
-            NoisyLinear(128, 128, noisy),
+            NoisyLinear(256, 256, noisy),
             nn.ReLU(),
         )
 
         self.value_stream = nn.Sequential(
-            NoisyLinear(128, 128, noisy), nn.ReLU(), NoisyLinear(128, 1, noisy)
+            NoisyLinear(256, 256, noisy), nn.ReLU(), NoisyLinear(256, 1, noisy)
         )
 
         self.advantage_stream = nn.Sequential(
-            NoisyLinear(128, 128, noisy), nn.ReLU(), NoisyLinear(128, self.output_dim, noisy)
+            NoisyLinear(256, 256, noisy), nn.ReLU(), NoisyLinear(256, self.output_dim, noisy)
         )
 
     def forward(self, state):
         features = self.feature_layer(state)
         values = self.value_stream(features)
         advantages = self.advantage_stream(features)
-        q = values + (advantages - advantages.mean())
+        q = values + (advantages - advantages.mean(dim=-1, keepdim=True))
 
         return q

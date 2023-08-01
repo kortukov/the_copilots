@@ -8,10 +8,10 @@ Args:
   target_update: 20
   replay_memory_size: 1000000
   learning_rate: 0.001
-  bins: 15
-  episode_length: 300
-  replay_episodes: 10
+  bins: 10 # doesn't matter here
+  episode_length: 1000
+  replay_episodes: 15
   prioritize: true
   prob_alpha: 0.6
   beta_start: 0.4
-  noisy: true
+  noisy: false

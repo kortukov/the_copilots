@@ -9,7 +9,8 @@ class ReplayBuffer:
     """Implementation of a fixed size Replay Buffer."""
 
     def __init__(self, capacity: int):
-        self.buffer = deque(maxlen=capacity)
+        # self.buffer = deque(maxlen=capacity)
+        self.buffer = rb.RingBuffer(capacity, dtype=object)
 
     def push(self, state, action, reward, next_state, done):
         """Add a new experience to memory."""
@@ -108,7 +109,6 @@ class PrioritizedReplayBuffer:
         # compute sampling probabilities from the priorities
         probs = prios**self.prob_alpha
         probs /= probs.sum()
-
         # sample indices based on the probabilities
         indices = np.random.choice(len(self.buffer), batch_size, p=probs)
         samples = self.buffer[indices]
