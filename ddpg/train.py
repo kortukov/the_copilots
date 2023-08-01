@@ -71,6 +71,8 @@ def main():
                           help='Whether to not run the wandb logging.')  
     optParser.add_option('--prioritize', action='store_true',
                         help='Whether to use prioritized replay buffer.')  
+    optParser.add_option('--custom-reward', action='store_true',
+                        help='Whether to use our custom reward function.')  
 
 
     opts, args = optParser.parse_args()
@@ -167,6 +169,9 @@ def main():
 
 
     # training loop
+    total_wins = 0
+    total_losses = 0
+    total_ties = 0
     for i_episode in range(1, max_episodes+1):
         frames = []
         start_ts = time.time()
@@ -176,6 +181,9 @@ def main():
         if env_name in HOCKEY_ENVS:
             obs_agent2 = env.obs_agent_two()
         total_reward=0
+        total_closeness_to_puck = 0
+        total_touch_puck = 0
+        total_puck_direction = 0
         step_starting_index = timestep
         for t in range(max_timesteps):
             timestep += 1
@@ -197,8 +205,24 @@ def main():
             if env_name in HOCKEY_ENVS:
                 (ob_new, reward, done, trunc, _info) = env.step(np.hstack([a1, a2]))
                 obs_agent2 = env.obs_agent_two()
+                total_closeness_to_puck += _info["reward_closeness_to_puck"]
+                total_touch_puck += _info["reward_touch_puck"]
+                total_puck_direction += _info["reward_puck_direction"]
             else:
                 (ob_new, reward, done, trunc, _info) = env.step(a1)
+
+            if opts.custom_reward:
+                winner = _info["winner"]
+                if winner == 0:
+                    if done:
+                        winner = -0.3  # encourage winning
+                    else:
+                        winner = -0.001 * t  # pushing to play aggressively
+                reward = winner * 100 + utils.calculate_rewards(ob_new)
+                reward = reward / 10
+
+
+
 
             total_reward+= reward
             agent.store_transition((ob, a1, reward, ob_new, done))
@@ -212,6 +236,11 @@ def main():
                 frames.append(frame)
 
             if done or trunc: 
+                if env_name in HOCKEY_ENVS:
+                    total_wins += int(_info["winner"] == 1)
+                    total_losses += int(_info["winner"] == -1)
+                    total_ties += int(_info["winner"] == 0)
+
                 break
 
         if timestep > update_after:
@@ -232,15 +261,25 @@ def main():
         lengths.append(t)
         
         # Log one episode to wandb
-        wandb.log(
-            {
-                "q1_loss": q1_loss_value, 
-                "q2_loss": q2_loss_value, 
-                "actor_loss": actor_loss,
-                "reward": total_reward,
-                "time": time.time() - start_ts,
-            } 
-        )
+        wandb_log_dict = {
+            "q1_loss": q1_loss_value, 
+            "q2_loss": q2_loss_value, 
+            "actor_loss": actor_loss,
+            "reward": total_reward,
+            "time": time.time() - start_ts,
+        }
+        if env_name in HOCKEY_ENVS:
+            wandb_log_dict.update(
+                {
+                    "wins_avg": total_wins / i_episode,
+                    "losses_avg": total_losses / i_episode,
+                    "ties_avg": total_ties / i_episode,
+                    "closeness_to_puck": total_closeness_to_puck,
+                    "touch_puck": total_touch_puck,
+                    "puck_direction": total_puck_direction,
+                }
+            )
+        wandb.log(wandb_log_dict)
 
         # save every 100 episodes
         if i_episode % 1000 == 0:
