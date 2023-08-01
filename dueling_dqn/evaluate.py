@@ -29,7 +29,7 @@ def main(env_name) -> None:
         "HockeyNormal": (
             "HockeyNormal",
             "hockey_normal_config.yaml",
-            "D:/git_projects/ML_Masters/Reinforcement_Learning/project/the_copilots/dueling_dqn/checkpoints/HockeyNormal/checkpoint_19000_HockeyNormal.pth",
+            "D:/git_projects/ML_Masters/Reinforcement_Learning/project/the_copilots/dueling_dqn/checkpoints/HockeyNormal/checkpoint_25000_HockeyNormal.pth",
         ),
         "HockeyTrainShooting": (
             "HockeyTrainShooting",

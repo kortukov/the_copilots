@@ -56,6 +56,8 @@ class Agent:
         else:
             self.replay_buffer = buffers.ReplayBuffer(args.replay_memory_size)
 
+        self.test_rewards = []
+        self.test_wlt = []
         print(self.prioritize)
         print(args.noisy)
 
@@ -207,6 +209,18 @@ class Agent:
             print(f"\n WINS: {100 * wins_counter / len(EVALUATION_SEEDS)} % \n ")
             print(f"\n LOOSES: {100 * loose_counter/ len(EVALUATION_SEEDS)} % \n ")
             print(f"\n TIES: {100 * tie_counter/ len(EVALUATION_SEEDS)} % \n ")
+            self.test_wlt.append([wins_counter, loose_counter, tie_counter])
+            plots.dump_array(
+                self.test_wlt,
+                path=f"plots/{self.env_name}",
+                filename="test_wins_losses_ties.pkl",
+            )
+        self.test_rewards.append(mean_rewards)
+        plots.dump_array(
+            self.test_rewards,
+            path=f"plots/{self.env_name}",
+            filename="test_rewards.pkl",
+        )
         self.model.train()
 
     def replay(self, replay_episodes=5):
@@ -259,7 +273,7 @@ class Agent:
                 losses.append(info["winner"] == -1)
 
             self.episode_continue = episode
-            if episode % 500 == 0:
+            if episode % 250 == 0:
                 self.save_checkpoint(
                     f"checkpoint_{episode}_{self.env_name}.pth", episode
                 )
@@ -268,7 +282,9 @@ class Agent:
             if episode % 50 == 0:
                 plots.plot_rewards(episodes_rewards, path=f"plots/{self.env_name}")
                 plots.plot_episode_duration(times, path=f"plots/{self.env_name}")
-                plots.dump_array(episodes_rewards, path=f"plots/{self.env_name}")
+                plots.dump_array(
+                    episodes_rewards, path=f"plots/{self.env_name}"
+                )
 
                 if "Hockey" in self.env_name:
                     plots.plot_hockey(wins, losses, ties, path=f"plots/{self.env_name}")

@@ -89,6 +89,11 @@ class EnvWrapper:
                 self.env = AdaptedHockeyEnv(mode=hockey_env.HockeyEnv.NORMAL)
                 self.player2 = hockey_env.BasicOpponent(weak=True)
         else:
+            if "Pendulum" in env_name:
+                env_name = "Pendulum-v1"
+            elif "HalfCheetah" in env_name:
+                env_name = "HalfCheetah-v4"
+
             if eval:
                 self.env = utils.DiscreteActionWrapper(
                     gym.make(env_name, render_mode="rgb_array_list"), self.bins

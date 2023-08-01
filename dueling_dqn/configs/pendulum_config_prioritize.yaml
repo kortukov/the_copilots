@@ -11,7 +11,7 @@ Args:
   bins: 5
   episode_length: 300
   replay_episodes: 10
-  prioritize: false
+  prioritize: true
   prob_alpha: 0.6
   beta_start: 0.4
   noisy: false
