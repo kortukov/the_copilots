@@ -14,4 +14,4 @@ Args:
   prioritize: false
   prob_alpha: 0.6
   beta_start: 0.4
-  noisy: false
+  noisy: true

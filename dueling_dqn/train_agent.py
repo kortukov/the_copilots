@@ -30,11 +30,13 @@ if __name__ == "__main__":
         # ("Pendulum-v1", "pendulum_config.yaml"),
         # ("Pendulum-v1-noisy", "pendulum_config_noisy.yaml"),
         # ("Pendulum-v1-prioritize", "pendulum_config_prioritize.yaml"),
-        ("Pendulum-v1-noisy-prioritize", "pendulum_config_noisy_prioritize.yaml"),
-
+        # ("Pendulum-v1-noisy-prioritize", "pendulum_config_noisy_prioritize.yaml"),
         # ("HalfCheetah-v4", "cheetah_config.yaml"),
-        # ("HockeyWeak", "hockey_weak_config.yaml"),
-        ("HockeyNormal", "hockey_normal_config.yaml"),
+        # ("HalfCheetah-v4-noisy", "cheetah_config_noisy.yaml"),
+        # ("HalfCheetah-v4-prioritize", "cheetah_config_prioritize.yaml"),
+        # ("HalfCheetah-v4-noisy-prioritize", "cheetah_config_noisy_prioritize.yaml"),
+        ("HockeyWeak", "hockey_weak_config.yaml"),
+        # ("HockeyNormal", "hockey_normal_config.yaml"),
         # ("HockeyTrainShooting", "hockey_shooting_config.yaml"),
         # ("HockeyTrainDefense", "hockey_defense_config.yaml"),
         # Add more environments and configs as needed
