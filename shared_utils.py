@@ -1,7 +1,19 @@
 from matplotlib import animation
 import matplotlib.pyplot as plt
 import numpy as np
+import torch 
+import random
 
+
+def set_seed(seed: int):
+    """Set seed for reproducibility."""
+    torch.manual_seed(seed)
+    torch.cuda.manual_seed(seed)
+    np.random.seed(seed)
+    random.seed(seed)
+
+    torch.backends.cudnn.deterministic = True
+    torch.backends.cudnn.benchmark = False
 
 def save_frames_as_gif(frames, path="./", filename="gym_animation.gif"):
     print(f"Saving {len(frames)} frames as gif")
