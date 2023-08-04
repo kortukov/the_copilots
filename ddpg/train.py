@@ -14,6 +14,7 @@ import wandb
 from DDPG import DDPGAgent
 from TD3 import TD3Agent
 import utils
+import evaluate 
 
 import os
 cwd = os.getcwd()
@@ -38,7 +39,7 @@ def main():
                          dest='lr',default=0.0001,
                          help='learning rate for actor/policy (default %default)')
     optParser.add_option('-m', '--maxepisodes',action='store',  type='int',
-                         dest='max_episodes',default=2000,
+                         dest='max_episodes',default=300,
                          help='number of episodes (default %default)')
     optParser.add_option('--start-steps',action='store',  type='int',
                          dest='start_steps',default=10000,
@@ -73,7 +74,9 @@ def main():
                         help='Whether to use prioritized replay buffer.')  
     optParser.add_option('--custom-reward', action='store_true',
                         help='Whether to use our custom reward function.')  
-
+    optParser.add_option('--eval-every', action='store', type='int',
+                        dest="eval_every", default=250,
+                        help='How often to run evaluation during training.') 
 
     opts, args = optParser.parse_args()
     ############## Hyperparameters ##############
@@ -166,12 +169,21 @@ def main():
         player2 = h_env.BasicOpponent(weak=False)   
     elif env_name == 'HockeyWeak':
         player2 = h_env.BasicOpponent(weak=True)
+    else:
+        player2 = None
 
+    # How to generate action of opponent
+    if env_name == "HockeyNormal" or env_name == "HockeyWeak":
+        player_2_act_func = lambda obs: player2.act(obs)
+    else:
+        player_2_act_func = lambda obs: [0, 0., 0, 0]
 
     # training loop
     total_wins = 0
     total_losses = 0
     total_ties = 0
+    list_eval_returns = []
+    list_train_rewards = []
     for i_episode in range(1, max_episodes+1):
         frames = []
         start_ts = time.time()
@@ -194,15 +206,8 @@ def main():
             else:
                 a1 = agent.random_action()# env.action_space.sample()
 
-            # Action of opponent
-            if env_name == "HockeyNormal" or env_name == "HockeyWeak":
-                a2 = player2.act(obs_agent2)
-            elif env_name == "HockeyTrainShooting":
-                a2 = [0, 0., 0, 0]
-            elif env_name == "HockeyTrainDefense":
-                a2 = [0, 0. ,0 , 0]
-
             if env_name in HOCKEY_ENVS:
+                a2 = player_2_act_func(obs_agent2)
                 (ob_new, reward, done, trunc, _info) = env.step(np.hstack([a1, a2]))
                 obs_agent2 = env.obs_agent_two()
                 total_closeness_to_puck += _info["reward_closeness_to_puck"]
@@ -219,10 +224,6 @@ def main():
                     else:
                         winner = -0.001 * t  # pushing to play aggressively
                 reward = winner * 100 + utils.calculate_rewards(ob_new)
-                reward = reward / 10
-
-
-
 
             total_reward+= reward
             agent.store_transition((ob, a1, reward, ob_new, done))
@@ -279,10 +280,33 @@ def main():
                     "puck_direction": total_puck_direction,
                 }
             )
+        list_train_rewards.append(total_reward)
+
+        if i_episode % opts.eval_every == 0:
+            # Run evaluation
+            eval_results = evaluate.run_evaluation(
+                agent, env, is_hockey_env=env_name in HOCKEY_ENVS, player_2_act_func=player_2_act_func,
+            )
+            list_eval_returns.append(eval_results.returns)
+            wandb_log_dict.update(
+                {
+                    'eval_mean_return': eval_results.mean_return,
+                    'eval_std_return': eval_results.std_return,
+                }
+            )
+            if env_name in HOCKEY_ENVS:
+                wandb_log_dict.update(
+                    {
+                        "eval_wins": eval_results.wins,
+                        "eval_losses": eval_results.losses,
+                        "eval_ties": eval_results.ties,
+                    }
+                )
+        
         wandb.log(wandb_log_dict)
 
-        # save every 100 episodes
-        if i_episode % 1000 == 0:
+        # save every 250 episodes
+        if i_episode % 250 == 0:
             print("########## Saving a checkpoint... ##########")
             torch.save(agent.state(), f'{results_dir}/{opts.agent}_{env_name}_{i_episode}-eps{eps}-t{train_iter}-l{lr}-s{random_seed}.pth')
             save_statistics()
@@ -304,7 +328,16 @@ def main():
                 {"video": wandb.Video(gif_filename, fps=25, format="gif")}
                 )
 
-
+    np_eval_returns = np.array(list_eval_returns)
+    np_train_rewards = np.array(list_train_rewards)
+    # Save eval results to numpy file
+    eval_returns_filename = f"{results_dir}/eval_returns.npy"
+    train_rewards_filename = f"{results_dir}/train_rewards.npy"
+    np.save(eval_returns_filename, np_eval_returns)
+    np.save(train_rewards_filename, np_train_rewards)
+    
+    wandb.save(eval_returns_filename)
+    wandb.save(train_rewards_filename)
     save_statistics()
 
 if __name__ == '__main__':

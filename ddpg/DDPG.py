@@ -136,7 +136,7 @@ class DDPGAgent(object):
 
         self.action_noise = OUNoise((self._action_n))
 
-        self.buffer = mem.Memory(max_size=self._config["buffer_size"])
+        self.replay_buffer = mem.Memory(max_size=self._config["buffer_size"])
 
         # Q Network
         self.Q1 = QFunction(observation_dim=self._obs_dim,
@@ -221,7 +221,8 @@ class DDPGAgent(object):
         return action[:self._action_n]
 
     def store_transition(self, transition):
-        self.buffer.add_transition(transition)
+        state, action, reward, next_state, done = transition
+        self.replay_buffer.push(state, action, reward, next_state, done)
 
     def state(self):
         return (self.Q1.state_dict(), self.policy.state_dict())
@@ -246,15 +247,17 @@ class DDPGAgent(object):
         for i in range(iter_fit):
             # sample from the replay buffer
             with catchtime(time_dict, 'sample'):
-                data=self.buffer.sample(batch=self._config['batch_size'])
+                batch, indices, weights = self.replay_buffer.sample(self._config['batch_size'])
 
-            with catchtime(time_dict, 'move data'):
-                s = to_torch(np.stack(data[:,0])).to(device) # s_t
-                a = to_torch(np.stack(data[:,1])).to(device) # a_t
-                rew = to_torch(np.stack(data[:,2])[:,None]).to(device) # rew  (batchsize,1)
-                s_prime = to_torch(np.stack(data[:,3])).to(device) # s_t+1
-                done = to_torch(np.stack(data[:,4])[:,None]).to(device) # done signal  (batchsize,1)
-            # TODO: Implement the rest of the algorithm
+            states, actions, rewards, next_states, dones = batch
+            s = torch.FloatTensor(states).to(device)
+            a = torch.LongTensor(actions).to(device)
+            rew = torch.FloatTensor(rewards).to(device).reshape(-1,1)
+            s_prime = torch.FloatTensor(next_states).to(device)
+            done = torch.FloatTensor(dones).to(device).reshape(-1,1)
+
+            if weights is not None:
+                weights = torch.FloatTensor(weights).to(device).reshape(-1,1)
 
             # Optimize critic 
             # Compute the target Q value 
