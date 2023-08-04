@@ -14,12 +14,6 @@ def calculate_rewards(observation):
     player1_pos = np.array([observation[0], observation[1]])
     player1_angle = observation[2]
     player1_vel = np.array([observation[3], observation[4]])
-    player1_angular_vel = observation[5]
-
-    player2_pos = np.array([observation[6], observation[7]])
-    player2_angle = observation[8]
-    player2_vel = np.array([observation[9], observation[10]])
-    player2_angular_vel = observation[11]
 
     puck_pos = np.array([observation[12], observation[13]])
     puck_vel = np.array([observation[14], observation[15]])
@@ -33,11 +27,11 @@ def calculate_rewards(observation):
     # Reward for puck possession time
     reward += puck_possession_time_player1 - puck_possession_time_player2
 
-    # Reward for puck direction towards opponent's goal
+    # Reward for a puck direction towards opponent's goal
     if puck_vel[0] > 0:
         reward += 1
 
-    # Reward for puck being in the opponent's half
+    # Reward for the puck being in the opponent's half
     if puck_pos[0] > 0:
         reward += 1
 
@@ -49,7 +43,7 @@ def calculate_rewards(observation):
     if np.dot(player1_vel, vec_to_puck) < 0:
         reward += 1
 
-    # Negative reward for high player speed (energy conservation)
+    # Negative reward for high-player speed
     reward -= np.linalg.norm(player1_vel)
 
     # Reward for facing towards the puck

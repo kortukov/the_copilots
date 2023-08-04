@@ -1,5 +1,5 @@
 Args:
-  num_episodes: 25000
+  num_episodes: 20000
   batch_size: 128
   gamma: 0.99
   initial_epsilon: 1.0
@@ -11,7 +11,7 @@ Args:
   bins: 15
   episode_length: 300
   replay_episodes: 10
-  prioritize: true
+  prioritize: false
   prob_alpha: 0.6
   beta_start: 0.4
-  noisy: true
+  noisy: false
