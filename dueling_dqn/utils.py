@@ -4,8 +4,7 @@ from gymnasium import spaces
 import numpy as np
 
 import torch
-
-from wrapper import EnvWrapper
+from omegaconf import OmegaConf
 
 
 class Args:
@@ -129,10 +128,7 @@ def set_seed(seed: int):
     torch.backends.cudnn.benchmark = False
 
 
-def get_env(env_name, bins):
-    """Get the hockey environment."""
-
-    env = EnvWrapper(env_name, bins)
-    eval_env = EnvWrapper(env_name, bins, eval=True)
-
-    return env, eval_env
+def load_hockey_args():
+    cfg = OmegaConf.load(f"dueling_dqn/configs/hockey_normal_config.yaml")
+    args = Args(**cfg.Args)
+    return args

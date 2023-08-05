@@ -6,17 +6,23 @@ import torch
 
 # Hack for importing from lower directory
 import sys, os
-sys.path.insert(1, os.path.join(sys.path[0], 'ddpg'))
-from TD3 import TD3Agent
+
+sys.path.insert(1, os.path.join(sys.path[0], "ddpg"))
+from ddpg.TD3 import TD3Agent
+from dueling_dqn.agent import Agent as DDQN_Agent
+from dueling_dqn.utils import load_hockey_args, CUSTOM_HOCKEY_ACTIONS
 import shared_constants
 import shared_utils
 
+
 @dataclasses.dataclass
 class PvpResults:
-    """Results of of two agents against each other."""
+    """Results of two agents against each other."""
+
     p1_wins: int = 0
     p2_wins: int = 0
     ties: int = 0
+
 
 def pvp_evaluation(agent1, agent2, env):
     # Hack to support both our agents and default agents
@@ -44,7 +50,7 @@ def pvp_evaluation(agent1, agent2, env):
         obs_agent2 = env.obs_agent_two()
 
         episode_return = 0
-        while True: 
+        while True:
             a1 = agent1_act(ob)
             a2 = agent2_act(obs_agent2)
             (ob_new, reward, done, trunc, _info) = env.step(np.hstack([a1, a2]))
@@ -52,7 +58,7 @@ def pvp_evaluation(agent1, agent2, env):
 
             episode_return += reward
             ob = ob_new
-            if done or trunc: 
+            if done or trunc:
                 p1_wins += int(_info["winner"] == 1)
                 p2_wins += int(_info["winner"] == -1)
                 ties += int(_info["winner"] == 0)
@@ -70,67 +76,98 @@ def pvp_evaluation(agent1, agent2, env):
 
 if __name__ == "__main__":
     optParser = optparse.OptionParser()
-    AGENT_TYPES = {'Weak', 'Strong', 'TD3', 'DDQN'}
-    optParser.add_option('--agent1', action='store', type='string',
-                         dest='agent1', default="Weak",
-                         help=f'Type of agent1, one of {AGENT_TYPES}')
+    AGENT_TYPES = {"Weak", "Strong", "TD3", "DDQN"}
+    optParser.add_option(
+        "--agent1",
+        action="store",
+        type="string",
+        dest="agent1",
+        default="Weak",
+        help=f"Type of agent1, one of {AGENT_TYPES}",
+    )
 
-    optParser.add_option('--agent1-path', action='store', type='string',
-                         dest='agent1_path', default=None,
-                         help=f'Path to model for agent1')
+    optParser.add_option(
+        "--agent1-path",
+        action="store",
+        type="string",
+        dest="agent1_path",
+        default=None,
+        help=f"Path to model for agent1",
+    )
 
-    optParser.add_option('--agent2', action='store', type='string',
-                         dest='agent2', default="Weak",
-                         help=f'Type of agent 2, one of {AGENT_TYPES}')
+    optParser.add_option(
+        "--agent2",
+        action="store",
+        type="string",
+        dest="agent2",
+        default="Weak",
+        help=f"Type of agent 2, one of {AGENT_TYPES}",
+    )
 
-    optParser.add_option('--agent2-path', action='store', type='string',
-                         dest='agent2_path', default=None,
-                         help=f'Path to model for agent1')
+    optParser.add_option(
+        "--agent2-path",
+        action="store",
+        type="string",
+        dest="agent2_path",
+        default=None,
+        help=f"Path to model for agent1",
+    )
 
     opts, args = optParser.parse_args()
 
-
     env = h_env.HockeyEnv(mode=h_env.HockeyEnv.NORMAL)
-    
+
     if opts.agent1 == "Weak":
-        agent1 = h_env.BasicOpponent(weak=True) 
+        agent1 = h_env.BasicOpponent(weak=True)
     elif opts.agent1 == "Strong":
-        agent1 = h_env.BasicOpponent(weak=False) 
+        agent1 = h_env.BasicOpponent(weak=False)
     elif opts.agent1 == "TD3":
         if opts.agent1_path is None:
             raise ValueError("Provide --agent1-path")
-        agent1 = TD3Agent(env.observation_space, env.action_space, **shared_constants.DEFAULT_TD3_PARAMS)
+        agent1 = TD3Agent(
+            env.observation_space,
+            env.action_space,
+            **shared_constants.DEFAULT_TD3_PARAMS,
+        )
         print(f"Loading agent1 from {opts.agent1_path}")
         agent1_state = torch.load(opts.agent1_path)
         agent1.restore_state(agent1_state)
     elif opts.agent1 == "DDQN":
         if opts.agent1_path is None:
             raise ValueError("Provide --agent1-path")
-        raise ValueError("For Sasha to implement")
+        hockey_args = load_hockey_args()
+        agent1 = DDQN_Agent("HockeyNormal", hockey_args)
+        agent1.load_checkpoint(opts.agent1_path, only_network=True)
+        agent1._act = agent1.act
+        agent1.act = lambda obs, eps: CUSTOM_HOCKEY_ACTIONS[agent1._act(obs, eps)]
     else:
         raise ValueError(f"Incorrect --agent1, should be one of {AGENT_TYPES}")
-        
 
     if opts.agent2 == "Weak":
-        agent2 = h_env.BasicOpponent(weak=True) 
+        agent2 = h_env.BasicOpponent(weak=True)
     elif opts.agent2 == "Strong":
-        agent2 = h_env.BasicOpponent(weak=False) 
+        agent2 = h_env.BasicOpponent(weak=False)
     elif opts.agent2 == "TD3":
         if opts.agent2_path is None:
             raise ValueError("Provide --agent2-path")
-        agent2 = TD3Agent(env.observation_space, env.action_space, **shared_constants.DEFAULT_TD3_PARAMS)
+        agent2 = TD3Agent(
+            env.observation_space,
+            env.action_space,
+            **shared_constants.DEFAULT_TD3_PARAMS,
+        )
         print(f"Loading agent2 from {opts.agent2_path}")
         agent2_state = torch.load(opts.agent2_path)
         agent2.restore_state(agent2_state)
     elif opts.agent2 == "DDQN":
         if opts.agent2_path is None:
             raise ValueError("Provide --agent2-path")
-        raise ValueError("For Sasha to implement")
+        hockey_args = load_hockey_args()
+        agent2 = DDQN_Agent("HockeyNormal", hockey_args)
+        agent2.load_checkpoint(opts.agent2_path, only_network=True)
+        agent2._act = agent2.act
+        agent2.act = lambda obs, eps: CUSTOM_HOCKEY_ACTIONS[agent2._act(obs, eps=0.0)]
     else:
         raise ValueError(f"Incorrect --agent1, should be one of {AGENT_TYPES}")
 
-    pvp_results = pvp_evaluation(agent1, agent2, env) 
+    pvp_results = pvp_evaluation(agent1, agent2, env)
     print(pvp_results)
-
-
-

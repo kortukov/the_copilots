@@ -6,17 +6,15 @@ import torch
 import torch.nn as nn
 import torch.optim as optim
 
-import buffers
-import plots
-import utils
-from model import DuelingDQN
+from . import buffers, wrapper, plots
+from .model import DuelingDQN
 from shared_constants import EVALUATION_SEEDS, VIDEO_SEEDS
 
 
 class Agent:
     def __init__(self, env_name, args):
         self.env_name = env_name
-        self.env, self.eval_env = utils.get_env(env_name, args.bins)
+        self.env, self.eval_env = wrapper.get_env(env_name, args.bins, agent=Agent)
 
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 

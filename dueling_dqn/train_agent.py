@@ -1,5 +1,5 @@
-from agent import Agent
-import utils
+from .agent import Agent
+from . import utils
 import hydra
 from omegaconf import DictConfig, OmegaConf
 
@@ -12,7 +12,7 @@ def train(env_name: str, cfg: DictConfig) -> None:
     # Initialize the environment and agent
     agent = Agent(env_name, args)
     agent.load_checkpoint(
-        "/home/oh/owl288/workdir/the_copilots/dueling_dqn/resulting_models/checkpoint_29750_HockeyNormal.pth",
+        "dueling_dqn/resulting_models/checkpoint_29750_HockeyNormal.pth",
         only_network=True,
     )
     agent.train()
@@ -36,12 +36,14 @@ if __name__ == "__main__":
         # ("HalfCheetah-v4-prioritize", "cheetah_config_prioritize.yaml"),
         # ("HalfCheetah-v4-noisy-prioritize", "cheetah_config_noisy_prioritize.yaml"),
         # ("HockeyWeak", "hockey_weak_config.yaml"),
-        ("HockeyNormal", "hockey_normal_config.yaml"),
+        # ("HockeyNormal", "hockey_normal_config.yaml"),
+        ("HockeySelfPlay", "hockey_selfplay_config.yaml"),
         # ("HockeyTrainShooting", "hockey_shooting_config.yaml"),
         # ("HockeyTrainDefense", "hockey_defense_config.yaml"),
         # Add more environments and configs as needed
     ]
 
     for env_name, cfg_name in envs_and_configs:
-        cfg = OmegaConf.load(f"configs/{cfg_name}")
+        cfg = OmegaConf.load(f"dueling_dqn/configs/{cfg_name}")
         train_agent(cfg)
+

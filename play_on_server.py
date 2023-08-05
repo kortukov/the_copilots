@@ -11,6 +11,9 @@ from client.backend.client import Client
 import sys, os
 sys.path.insert(1, os.path.join(sys.path[0], 'ddpg'))
 from ddpg.TD3 import TD3Agent
+from dueling_dqn.agent import Agent as DDQN_Agent
+from dueling_dqn.utils import load_hockey_args, CUSTOM_HOCKEY_ACTIONS
+
 import shared_constants
 
 
@@ -38,7 +41,20 @@ class TD3Controller(RemoteControllerInterface):
         self.agent.restore_state(agent_state)
         
     def remote_act(self, obs):
-        return self.agent.act(obs, eps=0.0)    
+        return self.agent.act(obs, eps=0.0)
+
+class DDQNController(RemoteControllerInterface):
+    def __init__(self, path):
+        RemoteControllerInterface.__init__(self, identifier='DDQNController')
+        env_name = "HockeyNormal"
+        hockey_args = load_hockey_args()
+        self.agent = DDQN_Agent(env_name, hockey_args)
+        self.agent.load_checkpoint(
+            path,
+            only_network=True,
+        )
+    def remote_act(self, obs):
+        return CUSTOM_HOCKEY_ACTIONS[self.agent.act(obs, eps=0.0)]
 
 if __name__ == '__main__':
     AGENT_TYPES = {'TD3', 'DDQN'}

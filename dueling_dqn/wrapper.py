@@ -5,7 +5,7 @@ import numpy as np
 from gymnasium.utils.save_video import save_video
 from laserhockey import hockey_env
 
-import utils
+from .utils import DiscreteActionWrapper, CUSTOM_HOCKEY_ACTIONS, load_hockey_args
 
 # Hack for importing from parent directory
 import sys, os
@@ -68,9 +68,50 @@ class AdaptedHockeyEnv(hockey_env.HockeyEnv):
     def render(self, *args, **kwargs):
         return super().render(mode="rgb_array")
 
+class SelfPlayEnv(AdaptedHockeyEnv):
+    def __init__(self, model_agent_path, agent, mode=hockey_env.HockeyEnv.NORMAL):
+        super().__init__(mode=mode)
+        self.basic_opponent = hockey_env.BasicOpponent(weak=False)
+        self.model_agent = self.load_model_agent(model_agent_path, agent)  # Implement this function to load model agent
+        self.wins_basic = 1
+        self.wins_model = 1
+        self.total_games = 1
+        self.total_games_temp = 1
+        self.current_opponent = None
+
+    def load_model_agent(self, model_agent_path, agent):
+        hockey_args = load_hockey_args()
+        loaded_agent = agent("HockeyNormal", hockey_args)
+        loaded_agent.load_checkpoint(model_agent_path, only_network=True)
+        loaded_agent._act = loaded_agent.act
+        loaded_agent.act = lambda obs: CUSTOM_HOCKEY_ACTIONS[loaded_agent._act(obs, eps=0.0)]
+
+        return loaded_agent
+
+    def act(self, obs):
+        if self.total_games > self.total_games_temp or self.current_opponent is None:
+            if np.random.rand() < self.wins_basic / self.total_games:
+                self.current_opponent = self.basic_opponent
+            else:
+                self.current_opponent = self.model_agent
+            self.total_games_temp = self.total_games
+
+        return self.current_opponent.act(obs)
+
+    def step(self, action):
+        next_state, reward, done, trunk, info = super().step(action)
+        if done:
+            self.total_games += 1
+            if info['winner'] == 1:
+                if self.current_opponent == self.basic_opponent:
+                    self.wins_basic += 1
+                else:
+                    self.wins_model += 1
+
+        return next_state, reward, done, trunk, info
 
 class EnvWrapper:
-    def __init__(self, env_name, bins, eval=False):
+    def __init__(self, env_name, bins, eval=False, **kwargs):
         self.env_name = env_name
         self.bins = bins
 
@@ -86,6 +127,10 @@ class EnvWrapper:
             elif env_name == "HockeyWeak":
                 self.env = AdaptedHockeyEnv(mode=hockey_env.HockeyEnv.NORMAL)
                 self.player2 = hockey_env.BasicOpponent(weak=True)
+            elif env_name == "HockeySelfPlay":
+                print(kwargs["agent"])
+                self.env = SelfPlayEnv("dueling_dqn/resulting_models/checkpoint_29750_HockeyNormal.pth", kwargs["agent"])
+                self.player2 = self.env
         else:
             if "Pendulum" in env_name:
                 env_name = "Pendulum-v1"
@@ -93,11 +138,11 @@ class EnvWrapper:
                 env_name = "HalfCheetah-v4"
 
             if eval:
-                self.env = utils.DiscreteActionWrapper(
+                self.env = DiscreteActionWrapper(
                     gym.make(env_name, render_mode="rgb_array_list"), self.bins
                 )
             else:
-                self.env = utils.DiscreteActionWrapper(
+                self.env = DiscreteActionWrapper(
                     gym.make(env_name), bins=self.bins
                 )
         self.frames = []
@@ -108,13 +153,13 @@ class EnvWrapper:
         if "Hockey" not in self.env_name:
             return self.env.action_space.n
         else:
-            return len(utils.CUSTOM_HOCKEY_ACTIONS)
+            return len(CUSTOM_HOCKEY_ACTIONS)
 
     def sample_action(self):
         if "Hockey" not in self.env_name:
             return self.env.action_space.sample()
         else:
-            return np.random.randint(len(utils.CUSTOM_HOCKEY_ACTIONS))
+            return np.random.randint(len(CUSTOM_HOCKEY_ACTIONS))
 
     def seed(self, seed):
         if "Hockey" not in self.env_name:
@@ -138,7 +183,7 @@ class EnvWrapper:
         if "Hockey" not in self.env_name:
             next_state, reward, done, trunk, info = self.env.step(action)
         elif not eval:
-            cont_action = utils.CUSTOM_HOCKEY_ACTIONS[action]
+            cont_action = CUSTOM_HOCKEY_ACTIONS[action]
             if self.env_name in ["HockeyTrainDefense", "HockeyTrainShooting"]:
                 cont_action = np.hstack([cont_action, [0, 0, 0, 0]])
             else:
@@ -154,7 +199,7 @@ class EnvWrapper:
             reward = winner * 100 + calculate_rewards(next_state)
             self.episode_step += 1
         else:
-            cont_action = utils.CUSTOM_HOCKEY_ACTIONS[action]
+            cont_action = CUSTOM_HOCKEY_ACTIONS[action]
             if self.env_name in ["HockeyTrainDefense", "HockeyTrainShooting"]:
                 cont_action = np.hstack([cont_action, [0, 0, 0, 0]])
             else:
@@ -186,3 +231,12 @@ class EnvWrapper:
                 gif_filename = f"videos/{self.env_name}/{self.env_name}_eval_{episode_n}_seed_{seed}.gif"
                 save_frames_as_gif(self.frames, path="", filename=gif_filename)
                 self.frames = []
+
+
+def get_env(env_name, bins, **kwargs):
+    """Get the hockey environment."""
+
+    env = EnvWrapper(env_name, bins, **kwargs)
+    eval_env = EnvWrapper(env_name, bins, eval=True, **kwargs)
+
+    return env, eval_env
