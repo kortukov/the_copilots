@@ -54,7 +54,7 @@ class DDQNController(RemoteControllerInterface):
             only_network=True,
         )
     def remote_act(self, obs):
-        return CUSTOM_HOCKEY_ACTIONS[self.agent.act(obs, eps=0.0)]
+        return np.array(CUSTOM_HOCKEY_ACTIONS[self.agent.act(obs, eps=0.0)])
 
 if __name__ == '__main__':
     AGENT_TYPES = {'TD3', 'DDQN'}
