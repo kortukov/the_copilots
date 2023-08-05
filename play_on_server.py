@@ -78,7 +78,9 @@ if __name__ == '__main__':
             raise ValueError("Provide --agent-path")
         controller = TD3Controller(path=opts.agent_path)
     elif opts.agent == "DDQN":
-        raise ValueError("DDQN not implemented yet")
+        if opts.agent_path is None:
+            raise ValueError("Provide --agent-path")
+        controller = DDQNController(path=opts.agent_path)
     else:
         print("Default is Weak player")
         controller = RemoteBasicOpponent(weak=False)
