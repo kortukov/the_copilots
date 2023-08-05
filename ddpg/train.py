@@ -22,7 +22,7 @@ print(cwd)
 with open('secrets.json', 'r') as f:
     SECRETS = json.load(f)
 
-HOCKEY_ENVS = {"HockeyNormal", "HockeyWeak", "HockeyTrainShooting", "HockeyTrainDefense"}
+HOCKEY_ENVS = {"HockeyNormal", "HockeyWeak", "HockeyTrainShooting", "HockeyTrainDefense", "SelfPlay"}
 
 def main():
     optParser = optparse.OptionParser()
@@ -93,6 +93,8 @@ def main():
         env = h_env.HockeyEnv(mode=h_env.HockeyEnv.TRAIN_SHOOTING)
     elif env_name == "HockeyTrainDefense":
         env = h_env.HockeyEnv(mode=h_env.HockeyEnv.TRAIN_DEFENSE)
+    elif env_name == "SelfPlay":
+        env = h_env.HockeyEnv(mode=h_env.HockeyEnv.NORMAL)
     else:
         env = gym.make(env_name, render_mode="rgb_array")
     render = False
@@ -175,6 +177,8 @@ def main():
     # How to generate action of opponent
     if env_name == "HockeyNormal" or env_name == "HockeyWeak":
         player_2_act_func = lambda obs: player2.act(obs)
+    elif env_name == "SelfPlay":
+        player_2_act_func = lambda obs: agent.act(obs, eps=0.0)
     else:
         player_2_act_func = lambda obs: [0, 0., 0, 0]
 
