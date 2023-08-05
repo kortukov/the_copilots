@@ -16,7 +16,7 @@ source ~/.bashrc
 conda activate rl
 echo "Starting job name: $SLURM_JOB_NAME"
 
-python  train.py -e HockeyNormal -m 30000 --agent DDPG --model resulting_models/weak_ddpg_30k.pth --results-dir results_$SLURM_JOB_NAME 
+python  train.py -e HockeyNormal -m 30000 --agent TD3 --model resulting_models/weak_td3_30k.pth --results-dir results_$SLURM_JOB_NAME 
 #  python  train.py -e HockeyNormal -m 25000 --agent TD3 --model results/TD3_Def_Shoot.pth --results-dir results_$SLURM_JOB_NAME
 # python  train.py -e HockeyTrainShooting -m 20000 --agent TD3 --model results_defense/TD3_HockeyTrainDefense_20000-eps0.1-t32-l0.0001-s42.pth  --results-dir results_$SLURM_JOB_NAME 
 

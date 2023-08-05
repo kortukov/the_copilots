@@ -6,6 +6,10 @@ from gymnasium.utils.save_video import save_video
 from laserhockey import hockey_env
 
 import utils
+
+# Hack for importing from parent directory
+import sys, os
+sys.path.insert(1, os.path.join(sys.path[0], '..'))
 from shared_utils import save_frames_as_gif
 
 
