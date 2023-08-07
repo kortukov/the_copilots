@@ -1,7 +1,8 @@
-from .agent import Agent
-from . import utils
 import hydra
 from omegaconf import DictConfig, OmegaConf
+
+from . import utils
+from .agent import Agent
 
 
 def train(env_name: str, cfg: DictConfig) -> None:

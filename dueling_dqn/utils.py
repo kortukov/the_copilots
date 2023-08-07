@@ -1,9 +1,7 @@
 import gymnasium as gym
-from gymnasium import spaces
-
 import numpy as np
-
 import torch
+from gymnasium import spaces
 from omegaconf import OmegaConf
 
 

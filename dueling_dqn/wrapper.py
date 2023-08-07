@@ -1,16 +1,20 @@
+# Hack for importing from parent directory
 import os
+import sys
 
 import gymnasium as gym
 import numpy as np
 from gymnasium.utils.save_video import save_video
 from laserhockey import hockey_env
 
+import shared_constants
+from ddpg.TD3 import TD3Agent
 from .utils import DiscreteActionWrapper, CUSTOM_HOCKEY_ACTIONS, load_hockey_args
 
-# Hack for importing from parent directory
-import sys, os
-sys.path.insert(1, os.path.join(sys.path[0], '..'))
+sys.path.insert(1, os.path.join(sys.path[0], ".."))
 from shared_utils import save_frames_as_gif
+
+import torch
 
 
 def calculate_rewards(observation):
@@ -47,9 +51,6 @@ def calculate_rewards(observation):
     if np.dot(player1_vel, vec_to_puck) < 0:
         reward += 1
 
-    # Negative reward for high-player speed
-    reward -= np.linalg.norm(player1_vel)
-
     # Reward for facing towards the puck
     direction_to_puck = np.arctan2(vec_to_puck[1], vec_to_puck[0])
     angle_diff = player1_angle - direction_to_puck
@@ -68,15 +69,20 @@ class AdaptedHockeyEnv(hockey_env.HockeyEnv):
     def render(self, *args, **kwargs):
         return super().render(mode="rgb_array")
 
+
 class SelfPlayEnv(AdaptedHockeyEnv):
     def __init__(self, model_agent_path, agent, mode=hockey_env.HockeyEnv.NORMAL):
         super().__init__(mode=mode)
         self.basic_opponent = hockey_env.BasicOpponent(weak=False)
-        self.model_agent = self.load_model_agent(model_agent_path, agent)  # Implement this function to load model agent
-        self.wins_basic = 1
-        self.wins_model = 1
-        self.total_games = 1
-        self.total_games_temp = 1
+        self.model_agent = self.load_model_agent(
+            model_agent_path, agent
+        )  # Implement this function to load model agent
+        self.td3_agent = self.load_td3_agent("ddpg/resulting_models/weak_td3_30k.pth")
+        self.losses_basic = 1
+        self.losses_model = 1
+        self.losses_td3 = 1
+        self.total_games = 3
+        self.total_games_temp = 3
         self.current_opponent = None
 
     def load_model_agent(self, model_agent_path, agent):
@@ -84,16 +90,46 @@ class SelfPlayEnv(AdaptedHockeyEnv):
         loaded_agent = agent("HockeyNormal", hockey_args)
         loaded_agent.load_checkpoint(model_agent_path, only_network=True)
         loaded_agent._act = loaded_agent.act
-        loaded_agent.act = lambda obs: CUSTOM_HOCKEY_ACTIONS[loaded_agent._act(obs, eps=0.0)]
+        loaded_agent.act = lambda obs: CUSTOM_HOCKEY_ACTIONS[
+            loaded_agent._act(obs, eps=0.0)
+        ]
 
         return loaded_agent
 
+    def load_td3_agent(self, model_agent_path):
+        env = hockey_env.HockeyEnv(mode=hockey_env.HockeyEnv.NORMAL)
+        agent1 = TD3Agent(
+            env.observation_space,
+            env.action_space,
+            **shared_constants.DEFAULT_TD3_PARAMS,
+        )
+        agent1_state = torch.load(model_agent_path)
+        agent1.restore_state(agent1_state)
+
+        return agent1
+
     def act(self, obs):
         if self.total_games > self.total_games_temp or self.current_opponent is None:
-            if np.random.rand() < self.wins_basic / self.total_games:
-                self.current_opponent = self.basic_opponent
-            else:
-                self.current_opponent = self.model_agent
+            p = np.array(
+                [
+                    np.log(self.losses_basic + 1),
+                    np.log(self.losses_model + 1),
+                    np.log(self.losses_td3 + 1),
+                ]
+            ) / (np.sum(
+                np.array(
+                    [
+                        np.log(self.losses_basic + 1),
+                        np.log(self.losses_model + 1),
+                        np.log(self.losses_td3 + 1),
+                    ]
+                )
+            ))
+            self.current_opponent = np.random.choice(
+                [self.basic_opponent, self.model_agent, self.td3_agent],
+                size=1,
+                p=p,
+            )[0]
             self.total_games_temp = self.total_games
 
         return self.current_opponent.act(obs)
@@ -101,14 +137,20 @@ class SelfPlayEnv(AdaptedHockeyEnv):
     def step(self, action):
         next_state, reward, done, trunk, info = super().step(action)
         if done:
-            self.total_games += 1
-            if info['winner'] == 1:
+            if info["winner"] != 1:
+                self.total_games += 1
                 if self.current_opponent == self.basic_opponent:
-                    self.wins_basic += 1
+                    self.losses_basic += 1
+                elif self.current_opponent == self.model_agent:
+                    self.losses_model += 1
                 else:
-                    self.wins_model += 1
-
+                    self.losses_td3 += 1
+            print(
+                f"Total games: {self.total_games}, losses basic: {self.losses_basic}, "
+                f"losses model: {self.losses_model}, losses td3: {self.losses_td3}"
+            )
         return next_state, reward, done, trunk, info
+
 
 class EnvWrapper:
     def __init__(self, env_name, bins, eval=False, **kwargs):
@@ -129,7 +171,10 @@ class EnvWrapper:
                 self.player2 = hockey_env.BasicOpponent(weak=True)
             elif env_name == "HockeySelfPlay":
                 print(kwargs["agent"])
-                self.env = SelfPlayEnv("dueling_dqn/resulting_models/checkpoint_29750_HockeyNormal.pth", kwargs["agent"])
+                self.env = SelfPlayEnv(
+                    "dueling_dqn/resulting_models/checkpoint_29750_HockeyNormal.pth",
+                    kwargs["agent"],
+                )
                 self.player2 = self.env
         else:
             if "Pendulum" in env_name:
@@ -142,9 +187,7 @@ class EnvWrapper:
                     gym.make(env_name, render_mode="rgb_array_list"), self.bins
                 )
             else:
-                self.env = DiscreteActionWrapper(
-                    gym.make(env_name), bins=self.bins
-                )
+                self.env = DiscreteActionWrapper(gym.make(env_name), bins=self.bins)
         self.frames = []
         self.episode_step = 0
 
@@ -195,8 +238,9 @@ class EnvWrapper:
                 if done:
                     winner = -0.3  # encourage winning
                 else:
-                    winner = -0.001 * self.episode_step  # pushing to play aggressively
-            reward = winner * 100 + calculate_rewards(next_state)
+                    winner = -0.002 * self.episode_step  # pushing to play aggressively
+            reward = winner * 100
+            reward += calculate_rewards(next_state)
             self.episode_step += 1
         else:
             cont_action = CUSTOM_HOCKEY_ACTIONS[action]

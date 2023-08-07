@@ -6,9 +6,9 @@ import torch
 import torch.nn as nn
 import torch.optim as optim
 
+from shared_constants import EVALUATION_SEEDS, VIDEO_SEEDS
 from . import buffers, wrapper, plots
 from .model import DuelingDQN
-from shared_constants import EVALUATION_SEEDS, VIDEO_SEEDS
 
 
 class Agent:
