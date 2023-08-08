@@ -85,6 +85,8 @@ def main():
     optParser.add_option('--eval-every', action='store', type='int',
                         dest="eval_every", default=250,
                         help='How often to run evaluation during training.') 
+    optParser.add_option('--big-model', action='store_true',
+                        dest="big_model", help='Whether to use bigger model.')  
 
     opts, args = optParser.parse_args()
     ############## Hyperparameters ##############
@@ -138,8 +140,14 @@ def main():
         "update_target_every": opts.update_every,
         "polyak": opts.polyak,
         "prioritize": opts.prioritize,
-        "is_hockey_env": env_name in HOCKEY_ENVS,
+        "is_hockey_env": env_name in HOCKEY_ENVS, 
     }
+
+    if opts.big_model:
+        agent_params.update({
+            "hidden_sizes_actor": [512,512, 512],
+            "hidden_sizes_critic": [512,512,256,64],
+            })
 
     if opts.agent == "DDPG": 
         agent = DDPGAgent(env.observation_space, env.action_space, **agent_params)
@@ -342,8 +350,8 @@ def main():
         
         wandb.log(wandb_log_dict)
 
-        # save every 250 episodes
-        if i_episode % 250 == 0:
+        # save every 1000 episodes
+        if i_episode % 1000 == 0:
             print("########## Saving a checkpoint... ##########")
             torch.save(agent.state(), f'{results_dir}/{opts.agent}_{env_name}_{i_episode}-eps{eps}-t{train_iter}-l{lr}-s{random_seed}.pth')
             save_statistics()

@@ -34,7 +34,7 @@ class RemoteBasicOpponent(BasicOpponent, RemoteControllerInterface):
 
 class TD3Controller(RemoteControllerInterface):
     def __init__(self, path):
-        RemoteControllerInterface.__init__(self, identifier='TD3Controller')
+        RemoteControllerInterface.__init__(self, identifier='TD3')
         env = HockeyEnv(mode=HockeyEnv.NORMAL)
         self.agent = TD3Agent(env.observation_space, env.action_space, **shared_constants.DEFAULT_TD3_PARAMS)
         agent_state = torch.load(path)
@@ -45,7 +45,7 @@ class TD3Controller(RemoteControllerInterface):
 
 class DDQNController(RemoteControllerInterface):
     def __init__(self, path):
-        RemoteControllerInterface.__init__(self, identifier='DDQNController')
+        RemoteControllerInterface.__init__(self, identifier='DDQN')
         env_name = "HockeyNormal"
         hockey_args = load_hockey_args()
         self.agent = DDQN_Agent(env_name, hockey_args)
