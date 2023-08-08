@@ -1,3 +1,4 @@
+import itertools
 import json
 import laserhockey.hockey_env as h_env
 import gymnasium as gym
@@ -16,13 +17,20 @@ from TD3 import TD3Agent
 import utils
 import evaluate 
 
-import os
+# Hack for importing from parent directory
+import sys, os
+sys.path.insert(1, os.path.join(sys.path[0], '..'))
+from dueling_dqn.agent import Agent as DDQN_Agent
+from dueling_dqn.utils import load_hockey_args, CUSTOM_HOCKEY_ACTIONS
+import shared_constants
+import shared_utils
+
 cwd = os.getcwd()
 print(cwd)
 with open('secrets.json', 'r') as f:
     SECRETS = json.load(f)
 
-HOCKEY_ENVS = {"HockeyNormal", "HockeyWeak", "HockeyTrainShooting", "HockeyTrainDefense", "SelfPlay"}
+HOCKEY_ENVS = {"HockeyNormal", "HockeyWeak", "HockeyTrainShooting", "HockeyTrainDefense", "SelfPlay", "SelfPlayVar"}
 
 def main():
     optParser = optparse.OptionParser()
@@ -93,7 +101,7 @@ def main():
         env = h_env.HockeyEnv(mode=h_env.HockeyEnv.TRAIN_SHOOTING)
     elif env_name == "HockeyTrainDefense":
         env = h_env.HockeyEnv(mode=h_env.HockeyEnv.TRAIN_DEFENSE)
-    elif env_name == "SelfPlay":
+    elif env_name == "SelfPlay" or env_name == "SelfPlayVar":
         env = h_env.HockeyEnv(mode=h_env.HockeyEnv.NORMAL)
     else:
         env = gym.make(env_name, render_mode="rgb_array")
@@ -171,6 +179,17 @@ def main():
         player2 = h_env.BasicOpponent(weak=False)   
     elif env_name == 'HockeyWeak':
         player2 = h_env.BasicOpponent(weak=True)
+    elif env_name == "SelfPlayVar":
+        strong = h_env.BasicOpponent(weak=False)   
+        hockey_args = load_hockey_args()
+        agent2 = DDQN_Agent("HockeyNormal", hockey_args)
+        agent2.load_checkpoint(
+            "/mnt/lustre/oh/owl288/the_copilots/dueling_dqn/resulting_models/checkpoint_29750_HockeyNormal.pth",
+             only_network=True
+        )
+        agent2._act = agent2.act
+        agent2.act = lambda obs: CUSTOM_HOCKEY_ACTIONS[agent2._act(obs, eps=0.0)]
+        player2 = agent2
     else:
         player2 = None
 
@@ -179,6 +198,13 @@ def main():
         player_2_act_func = lambda obs: player2.act(obs)
     elif env_name == "SelfPlay":
         player_2_act_func = lambda obs: agent.act(obs, eps=0.0)
+    elif env_name == "SelfPlayVar":
+        # Cycle through agent 2 and self using itertools
+        action_functions_cycle = itertools.cycle(
+            [('Self (TD3)', lambda obs: agent.act(obs, eps=0.0)), 
+            ('DDQN', lambda obs: agent2.act(obs)),
+              ('Strong', lambda obs: strong.act(obs))]
+            )
     else:
         player_2_act_func = lambda obs: [0, 0., 0, 0]
 
@@ -189,6 +215,9 @@ def main():
     list_eval_returns = []
     list_train_rewards = []
     for i_episode in range(1, max_episodes+1):
+        if env_name == "SelfPlayVar":
+            # Each new episode play against a new opponent
+            opponent_name, player_2_act_func = next(action_functions_cycle)
         frames = []
         start_ts = time.time()
         times = {}
@@ -288,9 +317,13 @@ def main():
 
         if i_episode % opts.eval_every == 0:
             # Run evaluation
+            if env_name == "SelfPlayVar":
+                # Only evaluate against fixed agent
+                player_2_act_func = lambda obs: agent2.act(obs)
             eval_results = evaluate.run_evaluation(
                 agent, env, is_hockey_env=env_name in HOCKEY_ENVS, player_2_act_func=player_2_act_func,
             )
+
             list_eval_returns.append(eval_results.returns)
             wandb_log_dict.update(
                 {
@@ -317,6 +350,9 @@ def main():
 
         # logging
         if i_episode % log_interval == 0:
+            if env_name == "SelfPlayVar":
+                print(f"Playing against {opponent_name}")
+
             avg_reward = np.mean(rewards[-log_interval:])
             avg_length = int(np.mean(lengths[-log_interval:]))
 
