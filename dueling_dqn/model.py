@@ -7,7 +7,7 @@ class NoisyLinear(nn.Module):
     """
     Noisy linear layer for exploration.
     Based on the paper: https://arxiv.org/pdf/1706.10295.pdf (Noisy Networks for Exploration, Fortunato et al. 2017)
-    Used version: (a) Independent Gaussian noise
+    Used version: (a) Factorised Gaussian noise
     """
 
     def __init__(self, in_features, out_features, noisy=True):

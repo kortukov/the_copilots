@@ -73,16 +73,18 @@ class AdaptedHockeyEnv(hockey_env.HockeyEnv):
 class SelfPlayEnv(AdaptedHockeyEnv):
     def __init__(self, model_agent_path, agent, mode=hockey_env.HockeyEnv.NORMAL):
         super().__init__(mode=mode)
-        self.basic_opponent = hockey_env.BasicOpponent(weak=False)
+        self.normal_opponent = hockey_env.BasicOpponent(weak=False)
+        self.weak_opponent = hockey_env.BasicOpponent(weak=True)
         self.model_agent = self.load_model_agent(
             model_agent_path, agent
         )  # Implement this function to load model agent
         self.td3_agent = self.load_td3_agent("ddpg/resulting_models/weak_td3_30k.pth")
-        self.losses_basic = 1
+        self.losses_weak = 1
+        self.losses_normal = 1
         self.losses_model = 1
         self.losses_td3 = 1
-        self.total_games = 3
-        self.total_games_temp = 3
+        self.total_games = 4
+        self.total_games_temp = 4
         self.current_opponent = None
 
     def load_model_agent(self, model_agent_path, agent):
@@ -112,21 +114,30 @@ class SelfPlayEnv(AdaptedHockeyEnv):
         if self.total_games > self.total_games_temp or self.current_opponent is None:
             p = np.array(
                 [
-                    np.log(self.losses_basic + 1),
+                    np.log(self.losses_weak + 1),
+                    np.log(self.losses_normal + 1),
                     np.log(self.losses_model + 1),
                     np.log(self.losses_td3 + 1),
                 ]
-            ) / (np.sum(
-                np.array(
-                    [
-                        np.log(self.losses_basic + 1),
-                        np.log(self.losses_model + 1),
-                        np.log(self.losses_td3 + 1),
-                    ]
+            ) / (
+                np.sum(
+                    np.array(
+                        [
+                            np.log(self.losses_weak + 1),
+                            np.log(self.losses_normal + 1),
+                            np.log(self.losses_model + 1),
+                            np.log(self.losses_td3 + 1),
+                        ]
+                    )
                 )
-            ))
+            )
             self.current_opponent = np.random.choice(
-                [self.basic_opponent, self.model_agent, self.td3_agent],
+                [
+                    self.weak_opponent,
+                    self.normal_opponent,
+                    self.model_agent,
+                    self.td3_agent,
+                ],
                 size=1,
                 p=p,
             )[0]
@@ -139,15 +150,17 @@ class SelfPlayEnv(AdaptedHockeyEnv):
         if done:
             if info["winner"] != 1:
                 self.total_games += 1
-                if self.current_opponent == self.basic_opponent:
-                    self.losses_basic += 1
+                if self.current_opponent == self.weak_opponent:
+                    self.losses_weak += 1
+                elif self.current_opponent == self.normal_opponent:
+                    self.losses_normal += 1
                 elif self.current_opponent == self.model_agent:
                     self.losses_model += 1
                 else:
                     self.losses_td3 += 1
             print(
-                f"Total games: {self.total_games}, losses basic: {self.losses_basic}, "
-                f"losses model: {self.losses_model}, losses td3: {self.losses_td3}"
+                f"Total games: {self.total_games}, losses weak: {self.losses_weak}, "
+                f"losses normal: {self.losses_normal}, losses model: {self.losses_model}, losses td3: {self.losses_td3}"
             )
         return next_state, reward, done, trunk, info
 
@@ -170,7 +183,6 @@ class EnvWrapper:
                 self.env = AdaptedHockeyEnv(mode=hockey_env.HockeyEnv.NORMAL)
                 self.player2 = hockey_env.BasicOpponent(weak=True)
             elif env_name == "HockeySelfPlay":
-                print(kwargs["agent"])
                 self.env = SelfPlayEnv(
                     "dueling_dqn/resulting_models/checkpoint_29750_HockeyNormal.pth",
                     kwargs["agent"],

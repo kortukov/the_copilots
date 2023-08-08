@@ -13,7 +13,7 @@ def train(env_name: str, cfg: DictConfig) -> None:
     # Initialize the environment and agent
     agent = Agent(env_name, args)
     agent.load_checkpoint(
-        "dueling_dqn/resulting_models/checkpoint_29750_HockeyNormal.pth",
+        "dueling_dqn/resulting_models/checkpoint_29750_HockeySelfPlay.pth",
         only_network=True,
     )
     agent.train()
