@@ -13,7 +13,8 @@ sns.set_context(
 
 
 def plot_rewards(rewards, path="plots", filename="rewards.svg", window_size=100):
-    """Plot episode rewards, running average, and standard deviation interval.
+    """
+    Plot episode rewards, running average, and standard deviation interval.
 
     Args:
         rewards (list): List of rewards received per episode.
@@ -21,8 +22,6 @@ def plot_rewards(rewards, path="plots", filename="rewards.svg", window_size=100)
         filename (str): Name of the file where the plot will be saved.
         window_size (int): Size of the sliding window for calculating the
             running average and standard deviation.
-
-    The plot is saved as a .png file with the name given in `filename`.
     """
     os.makedirs(path, exist_ok=True)
     filename = os.path.join(path, filename)
@@ -57,7 +56,8 @@ def plot_rewards(rewards, path="plots", filename="rewards.svg", window_size=100)
 
 
 def plot_episode_duration(times, path="plots", filename="times.svg", window_size=100):
-    """Plot episode durations, running average, and standard deviation interval.
+    """
+    Plot episode durations, running average, and standard deviation interval.
 
     Args:
         times (list): List of time durations per episode.
@@ -65,8 +65,6 @@ def plot_episode_duration(times, path="plots", filename="times.svg", window_size
         filename (str): Name of the file where the plot will be saved.
         window_size (int): Size of the sliding window for calculating the
             running average and standard deviation.
-
-    The plot is saved as a .png file with the name given in `filename`.
     """
     os.makedirs(path, exist_ok=True)
     filename = os.path.join(path, filename)
@@ -102,22 +100,20 @@ def plot_episode_duration(times, path="plots", filename="times.svg", window_size
 
 
 def plot_hockey(wins, losses, ties, path="plots"):
-    """Plot normalized cumulative wins, losses, and ties.
+    """
+    Plot normalized cumulative wins, losses, and ties.
 
     Args:
         wins (list): List of wins over time.
         losses (list): List of losses over time.
         ties (list): List of ties over time.
         path (str): Path to the directory where the plot will be saved.
-
-    The plot is saved as a .svg file with the name "hockey_plot.svg".
     """
     os.makedirs(path, exist_ok=True)
     filename = os.path.join(path, "hockey_plot.svg")
 
     plt.figure(figsize=(16, 10))
 
-    # Convert to numpy arrays for easier calculation
     wins = np.cumsum(np.array(wins))
     losses = np.cumsum(np.array(losses))
     ties = np.cumsum(np.array(ties))

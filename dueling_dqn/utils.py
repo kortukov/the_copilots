@@ -127,6 +127,7 @@ def set_seed(seed: int):
 
 
 def load_hockey_args():
+    """Needed only for PvP"""
     cfg = OmegaConf.load(f"dueling_dqn/configs/hockey_normal_config.yaml")
     args = Args(**cfg.Args)
     return args

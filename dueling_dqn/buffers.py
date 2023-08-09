@@ -1,5 +1,4 @@
 import random
-from collections import deque
 
 import numpy as np
 import numpy_ringbuffer as rb
@@ -44,13 +43,12 @@ class PrioritizedReplayBuffer:
         Args:
         - capacity: The maximum capacity of the buffer. Once the buffer is full, older experiences are removed.
         - prob_alpha: Exponent for probabilities. Determines how much prioritization is used.
-        - beta: Exponent for the importance sampling weights. Adjusts the bias introduced by this non-uniform sampling.
+        - beta: Exponent for the importance of sampling weights. Adjusts the bias introduced by this non-uniform sampling.
         """
 
         self.prob_alpha = prob_alpha
         self.beta = beta
         self.capacity = capacity
-        # self.buffer = deque(maxlen=capacity)
         self.buffer = rb.RingBuffer(capacity, dtype=object)
         self.pos = 0
         self.priorities = np.zeros(
@@ -58,7 +56,8 @@ class PrioritizedReplayBuffer:
         )  # priority values for each experience
 
     def push(self, state, action, reward, next_state, done):
-        """Add a new experience to memory.
+        """
+        Add a new experience to memory.
 
         The maximum priority is assigned to the new experience so that it has a chance to be sampled in the next update.
 
@@ -85,18 +84,19 @@ class PrioritizedReplayBuffer:
         self.pos = (self.pos + 1) % self.capacity  # increment the position index
 
     def sample(self, batch_size: int, beta: float = None):
-        """Sample a batch of experiences from memory.
+        """
+        Sample a batch of experiences from memory.
 
         Sampling is done based on the priorities of the experiences.
 
         Args:
         - batch_size: The number of experiences to sample.
-        - beta: Exponent for the importance sampling weights. Adjusts the bias introduced by this non-uniform sampling.
+        - beta: Exponent for the importance of sampling weights. Adjusts the bias introduced by this non-uniform sampling.
 
         Returns:
         - samples: The sampled experiences.
         - indices: The indices of the sampled experiences.
-        - weights: The importance sampling weights for the sampled experiences.
+        - weights: The importance of sampling weights for the sampled experiences.
         """
         if beta is None:
             beta = self.beta
@@ -133,7 +133,8 @@ class PrioritizedReplayBuffer:
         )
 
     def update_priorities(self, batch_indices, batch_priorities):
-        """Update priorities for sampled transitions.
+        """
+        Update priorities for sampled transitions.
 
         After the agent learns from a batch of experiences, the priorities in the buffer should be updated.
         The TD errors from the learning step give a measure of how surprising or unexpected the experiences were,

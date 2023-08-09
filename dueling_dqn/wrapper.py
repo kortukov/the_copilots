@@ -1,4 +1,3 @@
-# Hack for importing from parent directory
 import os
 import sys
 
@@ -78,13 +77,13 @@ class SelfPlayEnv(AdaptedHockeyEnv):
         self.model_agent = self.load_model_agent(
             model_agent_path, agent
         )  # Implement this function to load model agent
-        self.td3_agent = self.load_td3_agent("ddpg/resulting_models/weak_td3_30k.pth")
-        self.losses_weak = 1
+        self.td3_agent = self.load_td3_agent("ddpg/resulting_models/strongest_td3.pth")
+        self.losses_weak = 11
         self.losses_normal = 1
         self.losses_model = 1
         self.losses_td3 = 1
-        self.total_games = 4
-        self.total_games_temp = 4
+        self.total_games = 14
+        self.total_games_temp = 14
         self.current_opponent = None
 
     def load_model_agent(self, model_agent_path, agent):
@@ -184,7 +183,7 @@ class EnvWrapper:
                 self.player2 = hockey_env.BasicOpponent(weak=True)
             elif env_name == "HockeySelfPlay":
                 self.env = SelfPlayEnv(
-                    "dueling_dqn/resulting_models/checkpoint_29750_HockeyNormal.pth",
+                    "dueling_dqn/resulting_models/checkpoint_29750_HockeySelfPlay.pth",
                     kwargs["agent"],
                 )
                 self.player2 = self.env
