@@ -2,6 +2,7 @@ import json
 import optparse
 import numpy as np
 import torch
+import wandb
 
 from laserhockey.hockey_env import BasicOpponent, HockeyEnv
 from client.remoteControllerInterface import RemoteControllerInterface
@@ -72,7 +73,9 @@ if __name__ == '__main__':
     optParser.add_option('--output-path', action='store', type='string', dest='output_path', default="")
     opts, args = optParser.parse_args()
 
+    output_path = f'./games/{opts.output_path}' 
 
+    wandb.login(key=SECRETS["wandb_key"])
     if opts.agent == "TD3":
         if opts.agent_path is None:
             raise ValueError("Provide --agent-path")
@@ -82,11 +85,8 @@ if __name__ == '__main__':
             raise ValueError("Provide --agent-path")
         controller = DDQNController(path=opts.agent_path)
     else:
-        print("Default is Weak player")
-        controller = RemoteBasicOpponent(weak=False)
-
-    output_path = f'./games/{opts.output_path}' 
-
+        raise ValueError("choose agent")
+ 
     if opts.interactive:
         # Start interactive mode. Start playing by typing start_queuing. Stop playing by pressing escape and typing stop_queueing
         client = Client(
@@ -104,7 +104,7 @@ if __name__ == '__main__':
             output_path=output_path,
             interactive=False,
             op='start_queuing',
-            num_games=opts.num_games
+            num_games=opts.num_games,
         )
 
 
