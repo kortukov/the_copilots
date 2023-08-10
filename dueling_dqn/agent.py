@@ -280,9 +280,7 @@ class Agent:
             if episode % 50 == 0:
                 plots.plot_rewards(episodes_rewards, path=f"plots/{self.env_name}")
                 plots.plot_episode_duration(times, path=f"plots/{self.env_name}")
-                plots.dump_array(
-                    episodes_rewards, path=f"plots/{self.env_name}"
-                )
+                plots.dump_array(episodes_rewards, path=f"plots/{self.env_name}")
 
                 if "Hockey" in self.env_name:
                     plots.plot_hockey(wins, losses, ties, path=f"plots/{self.env_name}")
